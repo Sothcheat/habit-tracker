@@ -16,4 +16,29 @@ export default defineConfig({
       "@": path.resolve(import.meta.dirname, "./src"),
     },
   },
+  build: {
+    rolldownOptions: {
+      output: {
+        // Libraries every page needs, in their own long-lived files: they
+        // change far less often than the app, so a redeploy of app code
+        // leaves them cached. UI libraries are deliberately NOT grouped —
+        // the login page would then download the tracker's dialogs and menus;
+        // left alone, they split per page along the lazy routes in App.tsx.
+        codeSplitting: {
+          groups: [
+            {
+              name: "react",
+              test: /[\\/]node_modules[\\/](react|react-dom|scheduler|react-router)[\\/]/,
+              priority: 20,
+            },
+            {
+              name: "supabase",
+              test: /[\\/]node_modules[\\/]@supabase[\\/]/,
+              priority: 10,
+            },
+          ],
+        },
+      },
+    },
+  },
 });
