@@ -6,6 +6,9 @@ you finish once.
 
 Built with React 19, TypeScript and Vite, with Supabase for accounts and data.
 
+**Live demo:** [habit-tracker-bay-sigma.vercel.app](https://habit-tracker-bay-sigma.vercel.app/)
+— create an account to try it; each account sees only its own tasks.
+
 ## Features
 
 - **Accounts:** email sign-up and sign-in with validation. The tracker sits
@@ -75,7 +78,9 @@ You need Node 22+, [pnpm](https://pnpm.io) and a free
 
 `vercel.json` sends every path to `index.html`. Routes like `/login` exist
 only inside the app, so without it, refreshing one of them would return a 404.
-Real files such as `/assets/*` are still served directly. If a build fails on
+Real files are always served directly, and `/assets/` is excluded from the
+rewrite: after a redeploy, a tab still asking for an old code file gets a
+clean 404 instead of the HTML page served as JavaScript. If a build fails on
 the Node version, set Node 22.x under **Settings → General**.
 
 ## Scripts
