@@ -229,6 +229,21 @@ three fit. Two things change with the single column:
 - **Columns size to their contents.** The `28rem` floor applies from `sm`
   only: stacked, three empty columns meant scrolling three empty screens to
   reach To-dos.
+- **The header is width-budgeted, not wrapped.** It has to hold the wordmark,
+  a status chip, a three-way theme toggle and an avatar, which comes to 379px
+  — more than the 288px a 320px screen offers, so it used to wrap onto two
+  rows. Two things give way instead, in order of how little they cost:
+
+  | | `<400px` | `400–639px` | `≥640px` |
+  | --- | --- | --- | --- |
+  | Wordmark | mark only | mark + name | mark + name |
+  | Offline chip | icon (+ count) | icon (+ count) | full words |
+
+  Both hide their text with `sr-only`, never `hidden`, so the `h1` still reads
+  "Cadence" and the live region still announces the full sentence at every
+  width. That leaves 62px spare at 320px and 49px at 400px. **Anything new in
+  the header has to come out of that budget** — or replace something.
+
 - **The toolbar takes two rows.** Search spans the first on its own; Tags and
   **Add task** share the second, keeping find-on-the-left and make-on-the-right
   within that row. Letting the three wrap naturally put Search and Tags
@@ -317,7 +332,9 @@ and fill the viewport height; below that they stack.
   sits before the theme toggle: an icon and the word *Offline* on `secondary`,
   at `h-8` so it lines up with the controls beside it. It also counts writes
   the outbox is holding — *Offline · 3 waiting*, or just *3 waiting* once the
-  connection is back and they are going out. See §9 for why it is neither
+  connection is back and they are going out. **Below `sm` it loses its
+  words**, keeping the icon and, if there is one, a bare count; see the header
+  budget under §6. See §9 for why it is neither
   `destructive` nor `caution`.
 - **The photo controls** are a bordered band between the identity block and
   Sign out: an `outline` **Add photo** / **Change photo**, and a muted `ghost`

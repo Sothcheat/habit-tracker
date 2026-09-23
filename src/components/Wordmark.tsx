@@ -13,9 +13,17 @@ import { cn } from "@/lib/utils";
 function Wordmark({
   className,
   heading = false,
+  compact = false,
 }: {
   className?: string;
   heading?: boolean;
+  /**
+   * Drops the name below 400px, leaving the mark. For the tracker header,
+   * which also has to fit a status chip, a theme toggle and an avatar on a
+   * 320px screen — and is the one place the name is not load-bearing, since
+   * an installed app already carries it in the title bar and the launcher.
+   */
+  compact?: boolean;
 }) {
   const Tag = heading ? "h1" : "div";
   return (
@@ -32,7 +40,14 @@ function Wordmark({
           <rect x="23" y="4" width="5" height="24" rx="2.5" />
         </g>
       </svg>
-      <span className="font-semibold text-foreground text-lg tracking-tight">
+      {/* sr-only rather than hidden: the heading still reads "Cadence" to a
+          screen reader at every width. */}
+      <span
+        className={cn(
+          "font-semibold text-foreground text-lg tracking-tight",
+          compact && "sr-only min-[400px]:not-sr-only",
+        )}
+      >
         {APP_NAME}
       </span>
     </Tag>

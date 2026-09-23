@@ -40,14 +40,27 @@ function OfflineIndicator({
           ) : (
             <CloudOff className="size-3.5" aria-hidden="true" />
           )}
-          {online ? null : "Offline"}
-          {online || !waiting ? null : " · "}
-          {waiting ? `${pending} waiting` : null}
-          {/* The chip has room for two or three words; the reason belongs to
-              anyone who cannot see that the rest of the page has stopped
-              responding. */}
+
+          {/* Wordless below sm. The header also has to fit the wordmark, the
+              theme toggle and the avatar, and "Offline" is the one part a
+              glance does not need — the icon says it, and the sr-only line
+              below says it properly. A count still shows as a bare number,
+              because how much is waiting is not guessable from an icon. */}
+          {online ? null : <span className="hidden sm:inline">Offline</span>}
+          {!online && waiting ? (
+            <span aria-hidden="true" className="hidden sm:inline">
+              ·
+            </span>
+          ) : null}
+          {waiting ? (
+            <span className="tabular-nums">
+              {pending}
+              <span className="hidden sm:inline"> waiting</span>
+            </span>
+          ) : null}
+
           <span className="sr-only">
-            .{" "}
+            {online ? "" : "Offline. "}
             {waiting
               ? `${pending} ${pending === 1 ? "change" : "changes"} will be saved when the connection returns.`
               : "Your changes can't be saved until the connection returns."}

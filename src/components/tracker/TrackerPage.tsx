@@ -249,7 +249,7 @@ function Tracker({ userId }: { userId: string }) {
       <div className="flex min-h-svh flex-col">
         <header className="sticky top-0 z-10 border-border border-b bg-background/90 backdrop-blur">
           <div className="mx-auto flex w-full max-w-7xl flex-wrap items-center gap-x-4 gap-y-3 px-4 py-3 sm:px-6">
-            <Wordmark heading className="mr-auto" />
+            <Wordmark heading compact className="mr-auto" />
 
             {/* Outside the boundary below: it is a plain reading of
                 navigator.onLine with nothing to throw, and it reports on the
