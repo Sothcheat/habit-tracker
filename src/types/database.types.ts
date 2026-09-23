@@ -1,16 +1,3 @@
-/**
- * Supabase schema types for the habit tracker.
- *
- * Hand-derived from supabase/migrations/ so the app can be typed before the
- * project is reachable from the CLI. Once you can run the generator, replace
- * this file wholesale rather than editing it:
- *
- *   pnpm dlx supabase gen types typescript \
- *     --project-id artbewwpnuznjnkmvdxg > src/types/database.types.ts
- *
- * See docs/database_schema.md for the schema and the reasoning behind it.
- */
-
 export type Json =
   | string
   | number
@@ -20,132 +7,34 @@ export type Json =
   | Json[];
 
 export type Database = {
+  // Allows to automatically instantiate createClient with right options
+  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
+  __InternalSupabase: {
+    PostgrestVersion: "14.5";
+  };
   public: {
     Tables: {
-      profiles: {
-        Row: {
-          id: string;
-          display_name: string | null;
-          timezone: string;
-          week_start: number;
-          freeze_balance: number;
-          created_at: string;
-        };
-        Insert: {
-          id: string;
-          display_name?: string | null;
-          timezone?: string;
-          week_start?: number;
-          freeze_balance?: number;
-          created_at?: string;
-        };
-        Update: {
-          id?: string;
-          display_name?: string | null;
-          timezone?: string;
-          week_start?: number;
-          freeze_balance?: number;
-          created_at?: string;
-        };
-        Relationships: [
-          {
-            foreignKeyName: "profiles_id_fkey";
-            columns: ["id"];
-            isOneToOne: true;
-            referencedRelation: "users";
-            referencedColumns: ["id"];
-          },
-        ];
-      };
-      tasks: {
-        Row: {
-          id: string;
-          user_id: string;
-          type: Database["public"]["Enums"]["task_type"];
-          title: string;
-          notes: string | null;
-          priority: Database["public"]["Enums"]["priority_level"] | null;
-          direction: Database["public"]["Enums"]["habit_direction"] | null;
-          frequency: Database["public"]["Enums"]["frequency_type"] | null;
-          repeat_days: number[] | null;
-          every_n_days: number | null;
-          start_date: string | null;
-          due_date: string | null;
-          completed_at: string | null;
-          archived_at: string | null;
-          created_at: string;
-          updated_at: string;
-          position: number;
-        };
-        Insert: {
-          id?: string;
-          user_id: string;
-          type: Database["public"]["Enums"]["task_type"];
-          title: string;
-          notes?: string | null;
-          priority?: Database["public"]["Enums"]["priority_level"] | null;
-          direction?: Database["public"]["Enums"]["habit_direction"] | null;
-          frequency?: Database["public"]["Enums"]["frequency_type"] | null;
-          repeat_days?: number[] | null;
-          every_n_days?: number | null;
-          start_date?: string | null;
-          due_date?: string | null;
-          completed_at?: string | null;
-          archived_at?: string | null;
-          created_at?: string;
-          updated_at?: string;
-          position?: number;
-        };
-        Update: {
-          id?: string;
-          user_id?: string;
-          type?: Database["public"]["Enums"]["task_type"];
-          title?: string;
-          notes?: string | null;
-          priority?: Database["public"]["Enums"]["priority_level"] | null;
-          direction?: Database["public"]["Enums"]["habit_direction"] | null;
-          frequency?: Database["public"]["Enums"]["frequency_type"] | null;
-          repeat_days?: number[] | null;
-          every_n_days?: number | null;
-          start_date?: string | null;
-          due_date?: string | null;
-          completed_at?: string | null;
-          archived_at?: string | null;
-          created_at?: string;
-          updated_at?: string;
-          position?: number;
-        };
-        Relationships: [
-          {
-            foreignKeyName: "tasks_user_id_fkey";
-            columns: ["user_id"];
-            isOneToOne: false;
-            referencedRelation: "profiles";
-            referencedColumns: ["id"];
-          },
-        ];
-      };
       daily_logs: {
         Row: {
+          created_at: string;
           id: string;
-          task_id: string;
           log_date: string;
           status: Database["public"]["Enums"]["log_status"];
-          created_at: string;
+          task_id: string;
         };
         Insert: {
+          created_at?: string;
           id?: string;
-          task_id: string;
           log_date: string;
           status?: Database["public"]["Enums"]["log_status"];
-          created_at?: string;
+          task_id: string;
         };
         Update: {
+          created_at?: string;
           id?: string;
-          task_id?: string;
           log_date?: string;
           status?: Database["public"]["Enums"]["log_status"];
-          created_at?: string;
+          task_id?: string;
         };
         Relationships: [
           {
@@ -159,25 +48,25 @@ export type Database = {
       };
       habit_logs: {
         Row: {
-          id: string;
-          task_id: string;
           direction: Database["public"]["Enums"]["tap_direction"];
+          id: string;
           log_date: string;
           logged_at: string;
+          task_id: string;
         };
         Insert: {
-          id?: string;
-          task_id: string;
           direction: Database["public"]["Enums"]["tap_direction"];
+          id?: string;
           log_date: string;
           logged_at?: string;
+          task_id: string;
         };
         Update: {
-          id?: string;
-          task_id?: string;
           direction?: Database["public"]["Enums"]["tap_direction"];
+          id?: string;
           log_date?: string;
           logged_at?: string;
+          task_id?: string;
         };
         Relationships: [
           {
@@ -189,27 +78,57 @@ export type Database = {
           },
         ];
       };
-      tags: {
+      profiles: {
         Row: {
-          id: string;
-          user_id: string;
-          name: string;
-          color: string | null;
+          avatar_url: string | null;
           created_at: string;
+          display_name: string | null;
+          freeze_balance: number;
+          id: string;
+          timezone: string;
+          week_start: number;
         };
         Insert: {
-          id?: string;
-          user_id: string;
-          name: string;
-          color?: string | null;
+          avatar_url?: string | null;
           created_at?: string;
+          display_name?: string | null;
+          freeze_balance?: number;
+          id: string;
+          timezone?: string;
+          week_start?: number;
         };
         Update: {
+          avatar_url?: string | null;
+          created_at?: string;
+          display_name?: string | null;
+          freeze_balance?: number;
           id?: string;
-          user_id?: string;
-          name?: string;
+          timezone?: string;
+          week_start?: number;
+        };
+        Relationships: [];
+      };
+      tags: {
+        Row: {
+          color: string | null;
+          created_at: string;
+          id: string;
+          name: string;
+          user_id: string;
+        };
+        Insert: {
           color?: string | null;
           created_at?: string;
+          id?: string;
+          name: string;
+          user_id: string;
+        };
+        Update: {
+          color?: string | null;
+          created_at?: string;
+          id?: string;
+          name?: string;
+          user_id?: string;
         };
         Relationships: [
           {
@@ -223,25 +142,18 @@ export type Database = {
       };
       task_tags: {
         Row: {
-          task_id: string;
           tag_id: string;
+          task_id: string;
         };
         Insert: {
-          task_id: string;
           tag_id: string;
+          task_id: string;
         };
         Update: {
-          task_id?: string;
           tag_id?: string;
+          task_id?: string;
         };
         Relationships: [
-          {
-            foreignKeyName: "task_tags_task_id_fkey";
-            columns: ["task_id"];
-            isOneToOne: false;
-            referencedRelation: "tasks";
-            referencedColumns: ["id"];
-          },
           {
             foreignKeyName: "task_tags_tag_id_fkey";
             columns: ["tag_id"];
@@ -249,51 +161,233 @@ export type Database = {
             referencedRelation: "tags";
             referencedColumns: ["id"];
           },
+          {
+            foreignKeyName: "task_tags_task_id_fkey";
+            columns: ["task_id"];
+            isOneToOne: false;
+            referencedRelation: "tasks";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      tasks: {
+        Row: {
+          archived_at: string | null;
+          completed_at: string | null;
+          created_at: string;
+          direction: Database["public"]["Enums"]["habit_direction"] | null;
+          due_date: string | null;
+          every_n_days: number | null;
+          frequency: Database["public"]["Enums"]["frequency_type"] | null;
+          id: string;
+          notes: string | null;
+          position: number;
+          priority: Database["public"]["Enums"]["priority_level"] | null;
+          repeat_days: number[] | null;
+          start_date: string | null;
+          title: string;
+          type: Database["public"]["Enums"]["task_type"];
+          updated_at: string;
+          user_id: string;
+        };
+        Insert: {
+          archived_at?: string | null;
+          completed_at?: string | null;
+          created_at?: string;
+          direction?: Database["public"]["Enums"]["habit_direction"] | null;
+          due_date?: string | null;
+          every_n_days?: number | null;
+          frequency?: Database["public"]["Enums"]["frequency_type"] | null;
+          id?: string;
+          notes?: string | null;
+          position?: number;
+          priority?: Database["public"]["Enums"]["priority_level"] | null;
+          repeat_days?: number[] | null;
+          start_date?: string | null;
+          title: string;
+          type: Database["public"]["Enums"]["task_type"];
+          updated_at?: string;
+          user_id: string;
+        };
+        Update: {
+          archived_at?: string | null;
+          completed_at?: string | null;
+          created_at?: string;
+          direction?: Database["public"]["Enums"]["habit_direction"] | null;
+          due_date?: string | null;
+          every_n_days?: number | null;
+          frequency?: Database["public"]["Enums"]["frequency_type"] | null;
+          id?: string;
+          notes?: string | null;
+          position?: number;
+          priority?: Database["public"]["Enums"]["priority_level"] | null;
+          repeat_days?: number[] | null;
+          start_date?: string | null;
+          title?: string;
+          type?: Database["public"]["Enums"]["task_type"];
+          updated_at?: string;
+          user_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "tasks_user_id_fkey";
+            columns: ["user_id"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
         ];
       };
     };
-    Views: Record<never, never>;
+    Views: {
+      [_ in never]: never;
+    };
     Functions: {
-      owns_task: {
-        Args: { p_task_id: string };
-        Returns: boolean;
-      };
+      owns_task: { Args: { p_task_id: string }; Returns: boolean };
     };
     Enums: {
-      task_type: "habit" | "daily" | "todo";
-      priority_level: "low" | "normal" | "essential" | "urgent";
-      habit_direction: "positive" | "negative" | "both";
       frequency_type: "daily" | "weekdays" | "every_n_days";
+      habit_direction: "positive" | "negative" | "both";
       log_status: "done" | "frozen";
+      priority_level: "low" | "normal" | "essential" | "urgent";
       tap_direction: "plus" | "minus";
+      task_type: "habit" | "daily" | "todo";
     };
-    CompositeTypes: Record<never, never>;
+    CompositeTypes: {
+      [_ in never]: never;
+    };
   };
 };
 
-type PublicSchema = Database["public"];
+type DatabaseWithoutInternals = Omit<Database, "__InternalSupabase">;
 
-export type Tables<T extends keyof PublicSchema["Tables"]> =
-  PublicSchema["Tables"][T]["Row"];
+type DefaultSchema = DatabaseWithoutInternals[Extract<
+  keyof Database,
+  "public"
+>];
 
-export type TablesInsert<T extends keyof PublicSchema["Tables"]> =
-  PublicSchema["Tables"][T]["Insert"];
+export type Tables<
+  DefaultSchemaTableNameOrOptions extends
+    | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals;
+  }
+    ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
+        DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
+    : never = never,
+> = DefaultSchemaTableNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals;
+}
+  ? (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
+      DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])[TableName] extends {
+      Row: infer R;
+    }
+    ? R
+    : never
+  : DefaultSchemaTableNameOrOptions extends keyof (DefaultSchema["Tables"] &
+        DefaultSchema["Views"])
+    ? (DefaultSchema["Tables"] &
+        DefaultSchema["Views"])[DefaultSchemaTableNameOrOptions] extends {
+        Row: infer R;
+      }
+      ? R
+      : never
+    : never;
 
-export type TablesUpdate<T extends keyof PublicSchema["Tables"]> =
-  PublicSchema["Tables"][T]["Update"];
+export type TablesInsert<
+  DefaultSchemaTableNameOrOptions extends
+    | keyof DefaultSchema["Tables"]
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals;
+  }
+    ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
+    : never = never,
+> = DefaultSchemaTableNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals;
+}
+  ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"][TableName] extends {
+      Insert: infer I;
+    }
+    ? I
+    : never
+  : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema["Tables"]
+    ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
+        Insert: infer I;
+      }
+      ? I
+      : never
+    : never;
 
-export type Enums<T extends keyof PublicSchema["Enums"]> =
-  PublicSchema["Enums"][T];
+export type TablesUpdate<
+  DefaultSchemaTableNameOrOptions extends
+    | keyof DefaultSchema["Tables"]
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals;
+  }
+    ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
+    : never = never,
+> = DefaultSchemaTableNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals;
+}
+  ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"][TableName] extends {
+      Update: infer U;
+    }
+    ? U
+    : never
+  : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema["Tables"]
+    ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
+        Update: infer U;
+      }
+      ? U
+      : never
+    : never;
+
+export type Enums<
+  DefaultSchemaEnumNameOrOptions extends
+    | keyof DefaultSchema["Enums"]
+    | { schema: keyof DatabaseWithoutInternals },
+  EnumName extends DefaultSchemaEnumNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals;
+  }
+    ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
+    : never = never,
+> = DefaultSchemaEnumNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals;
+}
+  ? DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"][EnumName]
+  : DefaultSchemaEnumNameOrOptions extends keyof DefaultSchema["Enums"]
+    ? DefaultSchema["Enums"][DefaultSchemaEnumNameOrOptions]
+    : never;
+
+export type CompositeTypes<
+  PublicCompositeTypeNameOrOptions extends
+    | keyof DefaultSchema["CompositeTypes"]
+    | { schema: keyof DatabaseWithoutInternals },
+  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals;
+  }
+    ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
+    : never = never,
+> = PublicCompositeTypeNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals;
+}
+  ? DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"][CompositeTypeName]
+  : PublicCompositeTypeNameOrOptions extends keyof DefaultSchema["CompositeTypes"]
+    ? DefaultSchema["CompositeTypes"][PublicCompositeTypeNameOrOptions]
+    : never;
 
 export const Constants = {
   public: {
     Enums: {
-      task_type: ["habit", "daily", "todo"],
-      priority_level: ["low", "normal", "essential", "urgent"],
-      habit_direction: ["positive", "negative", "both"],
       frequency_type: ["daily", "weekdays", "every_n_days"],
+      habit_direction: ["positive", "negative", "both"],
       log_status: ["done", "frozen"],
+      priority_level: ["low", "normal", "essential", "urgent"],
       tap_direction: ["plus", "minus"],
+      task_type: ["habit", "daily", "todo"],
     },
   },
 } as const;

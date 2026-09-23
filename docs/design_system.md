@@ -225,11 +225,29 @@ standing explainer at the foot of the column. On `lg` they sit side by side
 and fill the viewport height; below that they stack.
 
 - **The header** holds the wordmark, the theme toggle and the account avatar —
-  nothing else. The avatar is the user's photo when their sign-in provides one
-  (Google), otherwise their initial on `secondary`. It opens a popover, not a
-  menu (it is mostly information): a larger avatar, name, the full email on one
-  line — the panel is `w-max`, sized to it, and wraps only past the screen
-  width, since showing it is the point — and Sign out.
+  nothing else. The avatar is the user's uploaded photo, failing that one their
+  sign-in provides (Google), failing both their initial on `secondary`. It
+  opens a popover, not a menu (it is mostly information): a larger avatar,
+  name, the full email on one line — the panel is `w-max`, sized to it, and
+  wraps only past the screen width, since showing it is the point — then the
+  photo controls, then Sign out.
+- **The photo controls** are a bordered band between the identity block and
+  Sign out: an `outline` **Add photo** / **Change photo**, and a muted `ghost`
+  **Remove** shown only when there is a photo to remove. Removing a photo is
+  reversible — the image re-uploads — so it is not `destructive` red, the same
+  reasoning that keeps Clear all filters a plain ghost button. Errors appear
+  under the buttons in `destructive`, in a live region that is always rendered
+  and collapses with `empty:hidden`. Buttons disable while a request is in
+  flight and say what they are doing ("Saving…"), matching the
+  confirmed-not-optimistic rule the cards follow. The controls are absent
+  entirely until the tracker has loaded, since there is no profile to edit yet.
+- **Choosing a photo is not uploading it.** A valid file replaces the large
+  avatar with its preview and the band's buttons become a `primary` **Save
+  photo** and a `ghost` **Cancel** — so the confirmation is of something the
+  user can see rather than a filename, and a mistaken pick costs nothing. A
+  rejected file never reaches the preview: it shows its reason in the live
+  region and leaves any existing choice alone. A failed save keeps the preview
+  up so Save can be pressed again without re-picking.
 - **The toolbar** sits above the columns, not in the header: Search and Tags on
   the left find things, **Add task** on the right makes them. The header holds
   only the wordmark, theme toggle and Sign out. Add task is the page's one
@@ -303,7 +321,39 @@ and fill the viewport height; below that they stack.
 
 ---
 
-## 9. Motion
+## 9. When a section breaks
+
+Two different failures, two different treatments, and they are not
+interchangeable:
+
+- **A request failed** — the data never arrived, the write was refused. These
+  are values, not exceptions: the tracker's `Result` type carries the message
+  to a `destructive` alert inside the column, or inline in a form. The UI is
+  intact; only the data is missing.
+- **A render threw** — a component hit something it could not draw. React
+  unmounts the whole tree unless a boundary catches it, so
+  [`ErrorBoundary`](../src/components/ErrorBoundary.tsx) wraps each section
+  that can fail alone: the account menu, the toolbar, and each of the three
+  columns separately. A bad row in To-dos costs you To-dos.
+
+The fallback is deliberately plain — a dashed `border` box, the section named
+in `foreground`, one `muted-foreground` line, and an `outline` **Try again**.
+It uses no `destructive` red: red is for a thing the user did that failed, and
+a crash is the app's fault, not theirs. **The raw error is never shown** — it
+is written for a developer and can carry internals. It goes to the console
+with its component stack.
+
+**Try again remounts, it does not just re-render.** The boundary bumps a key
+so the subtree is rebuilt from scratch; clearing the error alone would restore
+the same state that threw and fail identically.
+
+The header's boundary uses the `inline` variant — one quiet row with a small
+Try again — because a card in the middle of the bar would be louder than the
+control it replaced.
+
+---
+
+## 10. Motion
 
 There is **no decorative animation.** The only motion is the primitives' own
 state transitions on hover, focus and press.
@@ -315,7 +365,7 @@ cascade silently fails to suppress motion.
 
 ---
 
-## 10. Working rules
+## 11. Working rules
 
 1. **Tokens, not values.** No hex, no `rgb()`, no ad-hoc `box-shadow`.
 2. **Semantic name over appearance.** `text-muted-foreground`, not

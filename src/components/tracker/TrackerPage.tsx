@@ -6,6 +6,7 @@ import {
   SquareCheckBig,
 } from "lucide-react";
 import { useState } from "react";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { ProfileMenu } from "@/components/ProfileMenu";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { AddTaskMenu } from "@/components/tracker/AddTaskMenu";
@@ -25,6 +26,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { Wordmark } from "@/components/Wordmark";
 import { useAuth } from "@/lib/auth";
 import type { DailyLog, HabitLog, Task, TaskType } from "@/lib/tasks/api";
+import { avatarPublicUrl } from "@/lib/tasks/api";
 import {
   dailyStreak,
   habitStrength,
@@ -169,10 +171,28 @@ function Tracker({ userId }: { userId: string }) {
           <div className="mx-auto flex w-full max-w-7xl flex-wrap items-center gap-x-4 gap-y-3 px-4 py-3 sm:px-6">
             <Wordmark className="mr-auto" />
 
-            <div className="flex items-center gap-2">
-              <ThemeToggle />
-              <ProfileMenu />
-            </div>
+            {/* The header is the one part that must survive anything: it
+                holds the way out. Inline, so a failure here stays a quiet row
+                rather than a card in the middle of the bar. */}
+            <ErrorBoundary section="The account menu" variant="inline">
+              <div className="flex items-center gap-2">
+                <ThemeToggle />
+                {/* The stored value is a path; the public URL is built from
+                    it. Until the tracker loads there is no profile to edit,
+                    so the photo controls stay out rather than failing on use. */}
+                <ProfileMenu
+                  photoUrl={
+                    tracker.data?.avatarPath
+                      ? avatarPublicUrl(tracker.data.avatarPath)
+                      : null
+                  }
+                  onChangePhoto={tracker.data ? tracker.setAvatar : undefined}
+                  onRemovePhoto={
+                    tracker.data ? tracker.removeAvatar : undefined
+                  }
+                />
+              </div>
+            </ErrorBoundary>
           </div>
         </header>
 
@@ -192,205 +212,216 @@ function Tracker({ userId }: { userId: string }) {
         ) : (
           <main className="mx-auto flex w-full max-w-7xl flex-1 flex-col gap-6 px-4 py-6 sm:px-6">
             {/* Toolbar: find things on the left, make things on the right. */}
-            <div className="flex flex-wrap items-center gap-2">
-              <div className="relative min-w-48 flex-1 sm:max-w-md">
-                <Search
-                  className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
-                  aria-hidden="true"
+            <ErrorBoundary section="The toolbar">
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="relative min-w-48 flex-1 sm:max-w-md">
+                  <Search
+                    className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
+                    aria-hidden="true"
+                  />
+                  <Input
+                    type="search"
+                    aria-label="Search your tasks"
+                    placeholder="Search"
+                    value={search}
+                    onChange={(event) => setSearch(event.target.value)}
+                    className="h-9 pl-9"
+                  />
+                </div>
+                <TagFilter
+                  tags={data?.tags ?? []}
+                  selected={activeTags}
+                  onChange={setTagFilter}
+                  onClearAll={() => {
+                    setTagFilter(new Set());
+                    setSearch("");
+                  }}
+                  onSaveEdits={tracker.saveTagEdits}
                 />
-                <Input
-                  type="search"
-                  aria-label="Search your tasks"
-                  placeholder="Search"
-                  value={search}
-                  onChange={(event) => setSearch(event.target.value)}
-                  className="h-9 pl-9"
-                />
+                <div className="ml-auto">
+                  <AddTaskMenu onPick={setCreatingType} />
+                </div>
               </div>
-              <TagFilter
-                tags={data?.tags ?? []}
-                selected={activeTags}
-                onChange={setTagFilter}
-                onClearAll={() => {
-                  setTagFilter(new Set());
-                  setSearch("");
-                }}
-                onSaveEdits={tracker.saveTagEdits}
-              />
-              <div className="ml-auto">
-                <AddTaskMenu onPick={setCreatingType} />
-              </div>
-            </div>
+            </ErrorBoundary>
 
+            {/* One boundary per column, not one around the grid: a bad row in
+                To-dos should cost you To-dos, not the whole board. */}
             <div className="grid flex-1 gap-8 lg:grid-cols-3 lg:gap-6">
-              <TaskColumn
-                id="habits"
-                title="Habits"
-                count={habits.length}
-                countLabel="habits"
-                addPlaceholder="Add a habit"
-                filters={[
-                  { value: "all", label: "All" },
-                  { value: "weak", label: "Weak" },
-                  { value: "strong", label: "Strong" },
-                ]}
-                defaultFilter="all"
-                loading={loading}
-                onAdd={(title) => tracker.addTask("habit", title)}
-                error={columnErrors.habit}
-                onDismissError={dismiss("habit")}
-                empty={{
-                  icon: Diff,
-                  title: "These are your habits",
-                  body: "Habits have no fixed schedule. Log them as many times a day as they happen.",
-                }}
-                renderList={(filter) => {
-                  const list = habits
-                    .map((task) => ({ task, ...habitInfo(task) }))
-                    .filter(
-                      ({ strength }) => filter === "all" || strength === filter,
-                    );
-                  if (list.length === 0) {
-                    return habits.length ? (
-                      <FilteredOut>No {filter} habits right now.</FilteredOut>
-                    ) : (
-                      noMatch && <FilteredOut>{noMatch}</FilteredOut>
-                    );
-                  }
-                  return list.map(({ task, ...info }) => (
-                    <HabitCard
-                      key={task.id}
-                      task={task}
-                      {...info}
-                      pending={pendingIds.has(task.id)}
-                      onTap={(direction) =>
-                        run("habit", tracker.tapHabit(task.id, direction))
-                      }
-                      onOpen={() => setEditingId(task.id)}
-                      menu={menuFor(task)}
-                    />
-                  ));
-                }}
-              />
+              <ErrorBoundary section="Habits">
+                <TaskColumn
+                  id="habits"
+                  title="Habits"
+                  count={habits.length}
+                  countLabel="habits"
+                  addPlaceholder="Add a habit"
+                  filters={[
+                    { value: "all", label: "All" },
+                    { value: "weak", label: "Weak" },
+                    { value: "strong", label: "Strong" },
+                  ]}
+                  defaultFilter="all"
+                  loading={loading}
+                  onAdd={(title) => tracker.addTask("habit", title)}
+                  error={columnErrors.habit}
+                  onDismissError={dismiss("habit")}
+                  empty={{
+                    icon: Diff,
+                    title: "These are your habits",
+                    body: "Habits have no fixed schedule. Log them as many times a day as they happen.",
+                  }}
+                  renderList={(filter) => {
+                    const list = habits
+                      .map((task) => ({ task, ...habitInfo(task) }))
+                      .filter(
+                        ({ strength }) =>
+                          filter === "all" || strength === filter,
+                      );
+                    if (list.length === 0) {
+                      return habits.length ? (
+                        <FilteredOut>No {filter} habits right now.</FilteredOut>
+                      ) : (
+                        noMatch && <FilteredOut>{noMatch}</FilteredOut>
+                      );
+                    }
+                    return list.map(({ task, ...info }) => (
+                      <HabitCard
+                        key={task.id}
+                        task={task}
+                        {...info}
+                        pending={pendingIds.has(task.id)}
+                        onTap={(direction) =>
+                          run("habit", tracker.tapHabit(task.id, direction))
+                        }
+                        onOpen={() => setEditingId(task.id)}
+                        menu={menuFor(task)}
+                      />
+                    ));
+                  }}
+                />
+              </ErrorBoundary>
 
-              <TaskColumn
-                id="dailies"
-                title="Dailies"
-                count={
-                  dailies.filter((task) => {
-                    const info = dailyInfo(task);
-                    return info.dueToday && !info.doneToday;
-                  }).length
-                }
-                countLabel="dailies left today"
-                addPlaceholder="Add a daily"
-                filters={[
-                  { value: "all", label: "All" },
-                  { value: "due", label: "Due" },
-                  { value: "notDue", label: "Not due" },
-                ]}
-                defaultFilter="all"
-                loading={loading}
-                onAdd={(title) => tracker.addTask("daily", title)}
-                error={columnErrors.daily}
-                onDismissError={dismiss("daily")}
-                empty={{
-                  icon: CalendarDays,
-                  title: "These are your dailies",
-                  body: "Dailies repeat on a schedule. Choose the rhythm that suits you.",
-                }}
-                renderList={(filter) => {
-                  const list = dailies
-                    .map((task) => ({ task, ...dailyInfo(task) }))
-                    .filter(
-                      ({ dueToday }) =>
-                        filter === "all" ||
-                        (filter === "due" ? dueToday : !dueToday),
-                    );
-                  if (list.length === 0) {
-                    return dailies.length ? (
-                      <FilteredOut>
-                        {filter === "due"
-                          ? "Nothing due today."
-                          : "Everything is due today."}
-                      </FilteredOut>
-                    ) : (
-                      noMatch && <FilteredOut>{noMatch}</FilteredOut>
-                    );
+              <ErrorBoundary section="Dailies">
+                <TaskColumn
+                  id="dailies"
+                  title="Dailies"
+                  count={
+                    dailies.filter((task) => {
+                      const info = dailyInfo(task);
+                      return info.dueToday && !info.doneToday;
+                    }).length
                   }
-                  return list.map(({ task, ...info }) => (
-                    <DailyCard
-                      key={task.id}
-                      task={task}
-                      {...info}
-                      pending={pendingIds.has(task.id)}
-                      onToggle={(done) =>
-                        run("daily", tracker.toggleDaily(task.id, done))
-                      }
-                      onOpen={() => setEditingId(task.id)}
-                      menu={menuFor(task)}
-                    />
-                  ));
-                }}
-              />
+                  countLabel="dailies left today"
+                  addPlaceholder="Add a daily"
+                  filters={[
+                    { value: "all", label: "All" },
+                    { value: "due", label: "Due" },
+                    { value: "notDue", label: "Not due" },
+                  ]}
+                  defaultFilter="all"
+                  loading={loading}
+                  onAdd={(title) => tracker.addTask("daily", title)}
+                  error={columnErrors.daily}
+                  onDismissError={dismiss("daily")}
+                  empty={{
+                    icon: CalendarDays,
+                    title: "These are your dailies",
+                    body: "Dailies repeat on a schedule. Choose the rhythm that suits you.",
+                  }}
+                  renderList={(filter) => {
+                    const list = dailies
+                      .map((task) => ({ task, ...dailyInfo(task) }))
+                      .filter(
+                        ({ dueToday }) =>
+                          filter === "all" ||
+                          (filter === "due" ? dueToday : !dueToday),
+                      );
+                    if (list.length === 0) {
+                      return dailies.length ? (
+                        <FilteredOut>
+                          {filter === "due"
+                            ? "Nothing due today."
+                            : "Everything is due today."}
+                        </FilteredOut>
+                      ) : (
+                        noMatch && <FilteredOut>{noMatch}</FilteredOut>
+                      );
+                    }
+                    return list.map(({ task, ...info }) => (
+                      <DailyCard
+                        key={task.id}
+                        task={task}
+                        {...info}
+                        pending={pendingIds.has(task.id)}
+                        onToggle={(done) =>
+                          run("daily", tracker.toggleDaily(task.id, done))
+                        }
+                        onOpen={() => setEditingId(task.id)}
+                        menu={menuFor(task)}
+                      />
+                    ));
+                  }}
+                />
+              </ErrorBoundary>
 
-              <TaskColumn
-                id="todos"
-                title="To-dos"
-                count={todos.filter((task) => !task.completed_at).length}
-                countLabel="to-dos open"
-                addPlaceholder="Add a to-do"
-                filters={[
-                  { value: "active", label: "Active" },
-                  { value: "scheduled", label: "Scheduled" },
-                  { value: "complete", label: "Complete" },
-                ]}
-                defaultFilter="active"
-                loading={loading}
-                onAdd={(title) => tracker.addTask("todo", title)}
-                error={columnErrors.todo}
-                onDismissError={dismiss("todo")}
-                empty={{
-                  icon: SquareCheckBig,
-                  title: "These are your to-dos",
-                  body: "To-dos are done once. Give one a due date to schedule it.",
-                }}
-                renderList={(filter) => {
-                  const list = todos.filter((task) => {
-                    const done = task.completed_at !== null;
-                    if (filter === "complete") return done;
-                    if (filter === "scheduled")
-                      return !done && task.due_date !== null;
-                    return !done;
-                  });
-                  if (list.length === 0) {
-                    if (!todos.length)
-                      return noMatch && <FilteredOut>{noMatch}</FilteredOut>;
-                    return (
-                      <FilteredOut>
-                        {filter === "complete"
-                          ? "Nothing completed yet."
-                          : filter === "scheduled"
-                            ? "No to-dos with a due date."
-                            : "All clear."}
-                      </FilteredOut>
-                    );
-                  }
-                  return list.map((task) => (
-                    <TodoCard
-                      key={task.id}
-                      task={task}
-                      overdue={isOverdue(task, today)}
-                      pending={pendingIds.has(task.id)}
-                      onToggle={(done) =>
-                        run("todo", tracker.toggleTodo(task.id, done))
-                      }
-                      onOpen={() => setEditingId(task.id)}
-                      menu={menuFor(task)}
-                    />
-                  ));
-                }}
-              />
+              <ErrorBoundary section="To-dos">
+                <TaskColumn
+                  id="todos"
+                  title="To-dos"
+                  count={todos.filter((task) => !task.completed_at).length}
+                  countLabel="to-dos open"
+                  addPlaceholder="Add a to-do"
+                  filters={[
+                    { value: "active", label: "Active" },
+                    { value: "scheduled", label: "Scheduled" },
+                    { value: "complete", label: "Complete" },
+                  ]}
+                  defaultFilter="active"
+                  loading={loading}
+                  onAdd={(title) => tracker.addTask("todo", title)}
+                  error={columnErrors.todo}
+                  onDismissError={dismiss("todo")}
+                  empty={{
+                    icon: SquareCheckBig,
+                    title: "These are your to-dos",
+                    body: "To-dos are done once. Give one a due date to schedule it.",
+                  }}
+                  renderList={(filter) => {
+                    const list = todos.filter((task) => {
+                      const done = task.completed_at !== null;
+                      if (filter === "complete") return done;
+                      if (filter === "scheduled")
+                        return !done && task.due_date !== null;
+                      return !done;
+                    });
+                    if (list.length === 0) {
+                      if (!todos.length)
+                        return noMatch && <FilteredOut>{noMatch}</FilteredOut>;
+                      return (
+                        <FilteredOut>
+                          {filter === "complete"
+                            ? "Nothing completed yet."
+                            : filter === "scheduled"
+                              ? "No to-dos with a due date."
+                              : "All clear."}
+                        </FilteredOut>
+                      );
+                    }
+                    return list.map((task) => (
+                      <TodoCard
+                        key={task.id}
+                        task={task}
+                        overdue={isOverdue(task, today)}
+                        pending={pendingIds.has(task.id)}
+                        onToggle={(done) =>
+                          run("todo", tracker.toggleTodo(task.id, done))
+                        }
+                        onOpen={() => setEditingId(task.id)}
+                        menu={menuFor(task)}
+                      />
+                    ));
+                  }}
+                />
+              </ErrorBoundary>
             </div>
           </main>
         )}

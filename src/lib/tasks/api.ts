@@ -44,7 +44,7 @@ const TASK_COLUMNS = "*, task_tags(tag_id)";
 export function fetchProfile(userId: string) {
   return supabase
     .from("profiles")
-    .select("id, timezone")
+    .select("id, timezone, avatar_url")
     .eq("id", userId) // profiles.id IS the user id
     .maybeSingle();
 }
@@ -65,6 +65,56 @@ export function ensureProfile(userId: string, timezone: string) {
 
 export function updateProfileTimezone(userId: string, timezone: string) {
   return supabase.from("profiles").update({ timezone }).eq("id", userId); // only ever my own profile row
+}
+
+// ─── Avatars ────────────────────────────────────────────────────────────────
+//
+// The image lives in the public `avatars` bucket at `<userId>/<uuid>.<ext>`.
+// That first path segment is what the storage policies check, so every path
+// built here starts with the signed-in user's id — the same explicit scoping
+// the table queries use.
+//
+// profiles.avatar_url holds the path, not a URL: the public prefix belongs to
+// the project rather than the user, so storing it per row would mean rewriting
+// every row if the bucket ever moved.
+
+const AVATAR_BUCKET = "avatars";
+
+/** Resolves a stored path to the URL an <img> can use. */
+export function avatarPublicUrl(path: string) {
+  return supabase.storage.from(AVATAR_BUCKET).getPublicUrl(path).data.publicUrl;
+}
+
+/**
+ * Uploads to a fresh uuid every time rather than overwriting one fixed name.
+ * A public bucket is served through a CDN, and reusing the path would keep
+ * serving the previous image after a change — a stale avatar that no cache
+ * header we control can reliably fix.
+ */
+export function uploadAvatar(userId: string, blob: Blob, extension: string) {
+  const path = `${userId}/${crypto.randomUUID()}.${extension}`;
+  return supabase.storage
+    .from(AVATAR_BUCKET)
+    .upload(path, blob, { contentType: blob.type, upsert: false })
+    .then((result) => ({ ...result, path }));
+}
+
+export function updateProfileAvatar(userId: string, avatarUrl: string | null) {
+  return supabase
+    .from("profiles")
+    .update({ avatar_url: avatarUrl })
+    .eq("id", userId) // only ever my own profile row
+    .select("avatar_url")
+    .single();
+}
+
+/**
+ * Best-effort cleanup of a replaced image. The profile row is the source of
+ * truth; an object left behind is 50 KB of litter, so a failure here is not
+ * worth failing the change the user asked for.
+ */
+export function deleteAvatarObject(path: string) {
+  return supabase.storage.from(AVATAR_BUCKET).remove([path]);
 }
 
 export function fetchTasks(userId: string) {

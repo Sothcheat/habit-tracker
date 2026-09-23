@@ -91,6 +91,7 @@ One row per authenticated user, keyed by the `auth.users` id.
 | --- | --- | --- | --- | --- |
 | `id` | `uuid` | no | — | PK; FK → `auth.users(id)` on delete cascade |
 | `display_name` | `text` | yes | — | |
+| `avatar_url` | `text` | yes | — | Object path in the `avatars` bucket, not a URL — see §5.1 |
 | `timezone` | `text` | no | `'UTC'` | |
 | `week_start` | `smallint` | no | `1` | check between 0 and 6 |
 | `freeze_balance` | `integer` | no | `0` | check >= 0 |
@@ -272,6 +273,44 @@ Two details worth keeping if these policies are edited:
 
 `task_tags` has no update policy, by design: the table is nothing but its
 primary key, so a change is a delete plus an insert.
+
+### 5.1 The `avatars` storage bucket
+
+Profile pictures live in Supabase Storage, not in a column. `storage.objects`
+is one table shared by every bucket, with RLS already enabled by Supabase, so
+each policy names its own `bucket_id` and a missing policy means denied.
+
+| Property | Value |
+| --- | --- |
+| Bucket | `avatars`, **public** |
+| Path | `<user_id>/<uuid>.<ext>` — the first segment is the owner |
+| Size limit | 2 MiB (`2097152`) |
+| MIME types | `image/jpeg`, `image/png`, `image/webp` |
+| Policies | insert / update / delete where `(storage.foldername(name))[1] = auth.uid()` |
+
+Three decisions behind that:
+
+- **Public, so reads never reach RLS.** An avatar is visible to anyone who can
+  see the app anyway, and a public bucket means a plain `<img src>` served from
+  the CDN. A private bucket would force a `createSignedUrl()` call on every
+  render path, each with a TTL to manage, and buy nothing. Writes are still
+  gated by the policies above — public affects reads only.
+- **`profiles.avatar_url` stores the object path, not a full URL.** The public
+  URL prefix belongs to the project, not the user; storing it per row would
+  mean rewriting every row if the bucket moved. The client resolves it with
+  `getPublicUrl()`.
+- **A fresh uuid per upload, not a fixed `avatar.webp`.** A stable path behind
+  a CDN keeps serving the old image after a change. The client deletes the
+  previous object once the new path is saved.
+
+The 2 MiB limit is a backstop, not the real constraint. The bucket limit
+applies to what is *uploaded*, and
+[`src/lib/avatar.ts`](../src/lib/avatar.ts) centre-crops and re-encodes to a
+512px square WebP first — typically under 100 KB, so a 6 MB phone photo is
+never rejected for size. WebP is used over JPEG for the ~25-30% it saves at
+matched quality; JPEG is the fallback where the browser cannot encode WebP,
+which is checked rather than assumed because `canvas.toBlob` answers an
+unsupported format with PNG instead of an error.
 
 ---
 

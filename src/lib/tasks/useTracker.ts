@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { prepareAvatar } from "@/lib/avatar";
 import type { DailyLog, HabitLog, Tag, Task, TaskType } from "@/lib/tasks/api";
 import * as api from "@/lib/tasks/api";
 import { describeDataError } from "@/lib/tasks/data-errors";
@@ -11,6 +12,8 @@ export const DAILY_WINDOW_DAYS = 90;
 
 type TrackerData = {
   timezone: string;
+  /** Storage path, not a URL. Null when the user has no photo of their own. */
+  avatarPath: string | null;
   tasks: Task[];
   tags: Tag[];
   habitLogs: HabitLog[];
@@ -60,6 +63,7 @@ async function load(userId: string): Promise<TrackerData> {
 
   return {
     timezone,
+    avatarPath: profile.data?.avatar_url ?? null,
     tasks: tasks.data ?? [],
     tags: tags.data ?? [],
     // Drop the join column; it was only there to scope the query.
@@ -379,12 +383,64 @@ export function useTracker(userId: string) {
     return ok;
   }
 
+  /**
+   * Replaces the profile photo: process, upload, then point the row at the new
+   * object. The order matters — the row is only updated once the image is
+   * actually in the bucket, so a failed upload leaves avatar_url pointing at
+   * an image that still exists rather than at a 404.
+   */
+  async function setAvatar(file: File): Promise<Result> {
+    let prepared: Awaited<ReturnType<typeof prepareAvatar>>;
+    try {
+      prepared = await prepareAvatar(file);
+    } catch (error) {
+      // prepareAvatar throws messages written for the user.
+      return { error: (error as Error).message };
+    }
+
+    const uploaded = await api.uploadAvatar(
+      userId,
+      prepared.blob,
+      prepared.extension,
+    );
+    if (uploaded.error) return fail(uploaded.error);
+
+    const { data: profile, error } = await api.updateProfileAvatar(
+      userId,
+      uploaded.path,
+    );
+    if (error) {
+      // The row still points at the old image, so the orphan is the new one.
+      await api.deleteAvatarObject(uploaded.path);
+      return fail(error);
+    }
+
+    const previous = data?.avatarPath ?? null;
+    update((d) => ({ ...d, avatarPath: profile.avatar_url }));
+    if (previous) await api.deleteAvatarObject(previous);
+    return ok;
+  }
+
+  async function removeAvatar(): Promise<Result> {
+    const previous = data?.avatarPath ?? null;
+    if (!previous) return ok;
+
+    const { error } = await api.updateProfileAvatar(userId, null);
+    if (error) return fail(error);
+
+    update((d) => ({ ...d, avatarPath: null }));
+    await api.deleteAvatarObject(previous);
+    return ok;
+  }
+
   return {
     state,
     data,
     today,
     pendingIds,
     reload,
+    setAvatar,
+    removeAvatar,
     addTask,
     editTask,
     removeTask,
