@@ -1,9 +1,5 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-  <title>Cadence</title>
-  <rect width="32" height="32" rx="8" fill="#6a648f" />
-  <g fill="#ffffff">
-    <rect x="8" y="17" width="3.5" height="7" rx="1.75" />
-    <rect x="14.25" y="12" width="3.5" height="12" rx="1.75" />
-    <rect x="20.5" y="8" width="3.5" height="16" rx="1.75" />
-  </g>
-</svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32"><metadata><rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#" xmlns:dc="http://purl.org/dc/elements/1.1/"><rdf:Description><dc:creator>RealFaviconGenerator</dc:creator><dc:source>https://realfavicongenerator.net</dc:source></rdf:Description></rdf:RDF></metadata><title>Cadence</title><rect width="32" height="32" rx="8" fill="#6a648f"></rect><g fill="#ffffff">
+    <rect x="8" y="17" width="3.5" height="7" rx="1.75"></rect>
+    <rect x="14.25" y="12" width="3.5" height="12" rx="1.75"></rect>
+    <rect x="20.5" y="8" width="3.5" height="16" rx="1.75"></rect>
+  </g></svg>

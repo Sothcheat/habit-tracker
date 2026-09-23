@@ -2,6 +2,7 @@ import { lazy, Suspense, useEffect } from "react";
 import { Navigate, Route, Routes } from "react-router";
 import { GuestRoute } from "@/components/routing/GuestRoute";
 import { ProtectedRoute } from "@/components/routing/ProtectedRoute";
+import { UpdateToast } from "@/components/UpdateToast";
 
 // Each page is its own chunk, downloaded when first visited.
 const loadSignIn = () => import("@/components/auth/SignInForm");
@@ -57,46 +58,52 @@ const pageFallback = <div className="min-h-svh bg-background" />;
 
 function App() {
   return (
-    <Suspense fallback={pageFallback}>
-      <Routes>
-        {/* Signed-out only: a signed-in visitor is sent on to the tracker. */}
-        <Route element={<GuestRoute />}>
-          <Route
-            path="/login"
-            element={
-              <>
-                <SignInForm />
-                <WarmOtherPages />
-              </>
-            }
-          />
-          <Route
-            path="/signup"
-            element={
-              <>
-                <SignUpForm />
-                <WarmOtherPages />
-              </>
-            }
-          />
-        </Route>
+    <>
+      {/* Outside the Suspense boundary: an update is worth offering even while
+          a page is still downloading, and it is not part of any route. */}
+      <UpdateToast />
 
-        {/* Signed-in only: everyone else is redirected to /login. */}
-        <Route element={<ProtectedRoute />}>
-          <Route
-            path="/"
-            element={
-              <>
-                <TrackerPage />
-                <WarmOtherPages />
-              </>
-            }
-          />
-        </Route>
+      <Suspense fallback={pageFallback}>
+        <Routes>
+          {/* Signed-out only: a signed-in visitor is sent on to the tracker. */}
+          <Route element={<GuestRoute />}>
+            <Route
+              path="/login"
+              element={
+                <>
+                  <SignInForm />
+                  <WarmOtherPages />
+                </>
+              }
+            />
+            <Route
+              path="/signup"
+              element={
+                <>
+                  <SignUpForm />
+                  <WarmOtherPages />
+                </>
+              }
+            />
+          </Route>
 
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
-    </Suspense>
+          {/* Signed-in only: everyone else is redirected to /login. */}
+          <Route element={<ProtectedRoute />}>
+            <Route
+              path="/"
+              element={
+                <>
+                  <TrackerPage />
+                  <WarmOtherPages />
+                </>
+              }
+            />
+          </Route>
+
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </Suspense>
+    </>
   );
 }
 

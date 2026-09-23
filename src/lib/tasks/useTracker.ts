@@ -2,15 +2,22 @@ import { useCallback, useEffect, useState } from "react";
 import { prepareAvatar } from "@/lib/avatar";
 import type { DailyLog, HabitLog, Tag, Task, TaskType } from "@/lib/tasks/api";
 import * as api from "@/lib/tasks/api";
-import { describeDataError } from "@/lib/tasks/data-errors";
+import { describeDataError, isNetworkFailure } from "@/lib/tasks/data-errors";
 import { addDays, browserTimeZone, todayIn } from "@/lib/tasks/dates";
+import {
+  applyPatch,
+  flushOutbox,
+  pendingCount,
+  queueWrite,
+} from "@/lib/tasks/outbox";
+import { readSnapshot, writeSnapshot } from "@/lib/tasks/snapshot";
 import type { Enums, TablesUpdate } from "@/types/database.types";
 
 /** How much history to load. Habit strength looks back 30 days, streaks 90. */
 export const HABIT_WINDOW_DAYS = 30;
 export const DAILY_WINDOW_DAYS = 90;
 
-type TrackerData = {
+export type TrackerData = {
   timezone: string;
   /** Storage path, not a URL. Null when the user has no photo of their own. */
   avatarPath: string | null;
@@ -80,24 +87,65 @@ async function load(userId: string): Promise<TrackerData> {
  * leaves the screen showing something the database does not hold. While a
  * task has a request in flight its id is in `pendingIds`, so its controls
  * can disable themselves and a double-click cannot fire twice.
+ *
+ * **One exception, and only for an unreachable network.** A tap, a daily tick
+ * or a to-do completion that never left the device goes to the outbox and is
+ * applied locally, because telling someone on a train that their tap failed —
+ * when it will send perfectly well in ten minutes — is a worse lie than
+ * showing it as done. Everything else still fails loudly, and a write the
+ * database *refuses* fails loudly too: the rule bends for the connection, not
+ * for the database. See `outbox.ts`.
  */
 export function useTracker(userId: string) {
   const [state, setState] = useState<LoadState>({ status: "loading" });
   const [pendingIds, setPendingIds] = useState<ReadonlySet<string>>(new Set());
   const [reloadKey, setReloadKey] = useState(0);
+  /** Writes waiting for the connection to come back. Read once, then tracked. */
+  const [pendingWrites, setPendingWrites] = useState(() =>
+    pendingCount(userId),
+  );
 
   // reloadKey is never read in the body: bumping it is how reload() re-runs
-  // this effect, e.g. from the Retry button after a failed load.
+  // this effect, e.g. from the Retry button after a failed load, or when the
+  // connection comes back.
   // biome-ignore lint/correctness/useExhaustiveDependencies: deliberate trigger
   useEffect(() => {
     let active = true;
-    setState({ status: "loading" });
-    load(userId).then(
-      (data) => active && setState({ status: "ready", data }),
-      (error) =>
-        active &&
-        setState({ status: "error", message: describeDataError(error) }),
+
+    // What this device last saw, shown immediately. Offline this is the whole
+    // session; online it is one frame of stale data before the refresh lands,
+    // which beats a spinner over tasks we already have.
+    const cached = readSnapshot(userId);
+    setState(
+      cached ? { status: "ready", data: cached } : { status: "loading" },
     );
+
+    (async () => {
+      // Send before reading. A queued write is not on the server yet, so a
+      // read that overtook it would return data missing the change the user
+      // is looking at, and then overwrite their screen with it.
+      const { pending } = await flushOutbox(userId);
+      if (!active) return;
+      setPendingWrites(pending);
+
+      try {
+        const data = await load(userId);
+        if (!active) return;
+        setState({ status: "ready", data });
+      } catch (error) {
+        if (!active) return;
+        // With a snapshot on screen there is nothing to report: the app is
+        // working from what it has, and the header chip already says the
+        // connection is gone. The error screen is for having nothing at all.
+        if (!cached) {
+          setState({
+            status: "error",
+            message: describeDataError(error as Parameters<typeof fail>[0]),
+          });
+        }
+      }
+    })();
+
     return () => {
       active = false;
     };
@@ -107,6 +155,25 @@ export function useTracker(userId: string) {
   const today = todayIn(data?.timezone ?? browserTimeZone());
 
   const reload = useCallback(() => setReloadKey((key) => key + 1), []);
+
+  /**
+   * Reconnecting re-runs the load effect, which sends the outbox and then
+   * re-reads. One path for "catch up with the server", whether it is reached
+   * by the Try again button, a fresh mount or the network returning.
+   */
+  useEffect(() => {
+    window.addEventListener("online", reload);
+    return () => window.removeEventListener("online", reload);
+  }, [reload]);
+
+  /**
+   * Keeps the snapshot level with the screen, including changes the outbox
+   * has not sent. Reloading offline should show what you last saw, not what
+   * the server last confirmed.
+   */
+  useEffect(() => {
+    if (data) writeSnapshot(userId, data);
+  }, [userId, data]);
 
   function update(recipe: (data: TrackerData) => TrackerData) {
     setState((current) =>
@@ -145,20 +212,33 @@ export function useTracker(userId: string) {
   async function addTask(
     type: TaskType,
     title: string,
-    fields: Parameters<typeof api.insertTask>[4] = {},
+    fields: Parameters<typeof api.buildTaskRow>[4] = {},
     tagIds: string[] = [],
   ): Promise<Result> {
     const trimmed = title.trim();
     if (!trimmed) return { error: "Give it a name first." };
 
-    const { data: task, error } = await api.insertTask(
-      userId,
-      type,
-      trimmed,
-      today,
-      fields,
-    );
-    if (error) return fail(error);
+    const row = api.buildTaskRow(userId, type, trimmed, today, fields);
+    const response = await api.insertTaskRow(row);
+
+    if (response.error) {
+      if (!isNetworkFailure(response)) return fail(response.error);
+      setPendingWrites(
+        queueWrite(userId, {
+          id: crypto.randomUUID(),
+          kind: "task-create",
+          taskId: row.id as string,
+          row,
+          tagIds,
+        }),
+      );
+      update((d) => ({
+        ...d,
+        tasks: [...d.tasks, api.localTaskFromRow(row, tagIds)],
+      }));
+      return ok;
+    }
+    const task = response.data;
 
     if (tagIds.length === 0) {
       update((d) => ({ ...d, tasks: [...d.tasks, task] }));
@@ -184,12 +264,37 @@ export function useTracker(userId: string) {
     tagIds?: string[],
   ): Promise<Result> {
     return withPending(taskId, async () => {
-      const { data: saved, error } = await api.updateTask(
-        userId,
-        taskId,
-        patch,
-      );
-      if (error) return fail(error);
+      const response = await api.updateTask(userId, taskId, patch);
+
+      if (response.error) {
+        if (!isNetworkFailure(response)) return fail(response.error);
+        setPendingWrites(
+          queueWrite(userId, {
+            id: crypto.randomUUID(),
+            kind: "task-edit",
+            taskId,
+            patch,
+            tagIds,
+          }),
+        );
+        update((d) => ({
+          ...d,
+          tasks: d.tasks.map((t) =>
+            t.id === taskId
+              ? {
+                  // Through applyPatch, so an untouched field the form left
+                  // as undefined does not blank the value on screen.
+                  ...applyPatch(t, patch),
+                  ...(tagIds && {
+                    task_tags: tagIds.map((tag_id) => ({ tag_id })),
+                  }),
+                }
+              : t,
+          ),
+        }));
+        return ok;
+      }
+      const saved = response.data;
 
       let result = ok;
       let task = saved;
@@ -220,9 +325,19 @@ export function useTracker(userId: string) {
 
   function removeTask(taskId: string): Promise<Result> {
     return withPending(taskId, async () => {
-      const { data: deleted, error } = await api.deleteTask(userId, taskId);
-      if (error) return fail(error);
-      if (!deleted?.length) {
+      const response = await api.deleteTask(userId, taskId);
+
+      if (response.error) {
+        if (!isNetworkFailure(response)) return fail(response.error);
+        setPendingWrites(
+          queueWrite(userId, {
+            id: crypto.randomUUID(),
+            kind: "task-delete",
+            taskId,
+          }),
+        );
+        // Fall through to the same local removal the confirmed path does.
+      } else if (!response.data?.length) {
         return {
           error: "That item no longer exists. Refresh to see the latest.",
         };
@@ -243,12 +358,36 @@ export function useTracker(userId: string) {
     direction: Enums<"tap_direction">,
   ): Promise<Result> {
     return withPending(taskId, async () => {
-      const { data: log, error } = await api.insertHabitLog(
+      // Generated here rather than by the database, so the row the screen
+      // shows and the row that eventually lands are the same row.
+      const logId = crypto.randomUUID();
+      const log = {
+        id: logId,
+        task_id: taskId,
+        direction,
+        log_date: today,
+      };
+      const response = await api.insertHabitLog(
         taskId,
         direction,
         today,
+        logId,
       );
-      if (error) return fail(error);
+
+      if (response.error) {
+        if (!isNetworkFailure(response)) return fail(response.error);
+        setPendingWrites(
+          queueWrite(userId, {
+            id: crypto.randomUUID(),
+            kind: "habit-tap",
+            taskId,
+            logId,
+            direction,
+            date: today,
+          }),
+        );
+      }
+
       update((d) => ({ ...d, habitLogs: [...d.habitLogs, log] }));
       return ok;
     });
@@ -256,9 +395,32 @@ export function useTracker(userId: string) {
 
   function toggleDaily(taskId: string, done: boolean): Promise<Result> {
     return withPending(taskId, async () => {
+      const queue = () =>
+        setPendingWrites(
+          queueWrite(userId, {
+            id: crypto.randomUUID(),
+            kind: "daily-mark",
+            taskId,
+            date: today,
+            done,
+          }),
+        );
+
       if (done) {
-        const { data: log, error } = await api.markDailyDone(taskId, today);
-        if (error) return fail(error);
+        const response = await api.markDailyDone(taskId, today);
+        if (response.error) {
+          if (!isNetworkFailure(response)) return fail(response.error);
+          queue();
+        }
+        // Nothing reads a daily log by id — they are found by task and date —
+        // so a local id for an unsent row is safe, and the upsert on
+        // (task_id, log_date) settles which row is real when it sends.
+        const log = response.data ?? {
+          id: crypto.randomUUID(),
+          task_id: taskId,
+          log_date: today,
+          status: "done" as const,
+        };
         update((d) => ({
           ...d,
           dailyLogs: [
@@ -269,8 +431,11 @@ export function useTracker(userId: string) {
           ],
         }));
       } else {
-        const { error } = await api.unmarkDailyDone(taskId, today);
-        if (error) return fail(error);
+        const response = await api.unmarkDailyDone(taskId, today);
+        if (response.error) {
+          if (!isNetworkFailure(response)) return fail(response.error);
+          queue();
+        }
         update((d) => ({
           ...d,
           dailyLogs: d.dailyLogs.filter(
@@ -284,11 +449,33 @@ export function useTracker(userId: string) {
 
   function toggleTodo(taskId: string, done: boolean): Promise<Result> {
     return withPending(taskId, async () => {
-      const { data: task, error } = await api.updateTask(userId, taskId, {
-        completed_at: done ? new Date().toISOString() : null,
+      // Fixed here, not at replay: a to-do ticked last night was finished last
+      // night, whenever the connection gets around to agreeing.
+      const completedAt = done ? new Date().toISOString() : null;
+      const response = await api.updateTask(userId, taskId, {
+        completed_at: completedAt,
       });
-      if (error) return fail(error);
-      replaceTask(task);
+
+      if (response.error) {
+        if (!isNetworkFailure(response)) return fail(response.error);
+        setPendingWrites(
+          queueWrite(userId, {
+            id: crypto.randomUUID(),
+            kind: "todo-complete",
+            taskId,
+            completedAt,
+          }),
+        );
+        update((d) => ({
+          ...d,
+          tasks: d.tasks.map((t) =>
+            t.id === taskId ? { ...t, completed_at: completedAt } : t,
+          ),
+        }));
+        return ok;
+      }
+
+      replaceTask(response.data);
       return ok;
     });
   }
@@ -438,6 +625,7 @@ export function useTracker(userId: string) {
     data,
     today,
     pendingIds,
+    pendingWrites,
     reload,
     setAvatar,
     removeAvatar,

@@ -67,7 +67,9 @@ function UserAvatar({
     // The primitive sizes lg with a data-[size=lg]: variant, which cn() keeps
     // alongside a plain size-12 — so override the variant itself.
     <Avatar size={size} className="data-[size=lg]:size-12">
-      {photo && <AvatarImage src={photo} alt="" />}
+      {/* A CORS request, so the service worker sees a real status and caches
+          only a real image — see the avatar rule in vite.config.ts. */}
+      {photo && <AvatarImage src={photo} alt="" crossOrigin="anonymous" />}
       <AvatarFallback
         className={cn(
           "bg-secondary font-semibold text-secondary-foreground",

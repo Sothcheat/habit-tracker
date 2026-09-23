@@ -3,6 +3,7 @@ import {
   ArrowUp,
   EllipsisVertical,
   Pencil,
+  Share2,
   Trash2,
 } from "lucide-react";
 import {
@@ -20,6 +21,11 @@ import {
 
 export type TaskMenuActions = {
   onEdit: () => void;
+  /**
+   * Absent where the browser has no share sheet, and the item is then not
+   * rendered — better than offering an action that cannot happen.
+   */
+  onShare?: () => void;
   onMoveTop: () => void;
   onMoveBottom: () => void;
   onDelete: () => void;
@@ -37,6 +43,7 @@ function TaskMenu({
   title,
   disabled,
   onEdit,
+  onShare,
   onMoveTop,
   onMoveBottom,
   onDelete,
@@ -53,7 +60,7 @@ function TaskMenu({
             <DropdownMenuTrigger
               disabled={disabled}
               aria-label={`Options for "${title}"`}
-              className="flex size-7 items-center justify-center rounded-md text-muted-foreground opacity-0 outline-none transition-opacity hover:bg-accent hover:text-foreground focus-visible:opacity-100 focus-visible:ring-3 focus-visible:ring-ring/50 disabled:pointer-events-none group-focus-within/card:opacity-100 group-hover/card:opacity-100 data-popup-open:opacity-100 [@media(hover:none)]:opacity-100"
+              className="tap-target flex size-7 items-center justify-center rounded-md text-muted-foreground opacity-0 outline-none transition-opacity hover:bg-accent hover:text-foreground focus-visible:opacity-100 focus-visible:ring-3 focus-visible:ring-ring/50 disabled:pointer-events-none group-focus-within/card:opacity-100 group-hover/card:opacity-100 data-popup-open:opacity-100 [@media(hover:none)]:opacity-100"
             />
           }
         >
@@ -67,6 +74,12 @@ function TaskMenu({
           <Pencil aria-hidden="true" />
           Edit
         </DropdownMenuItem>
+        {onShare && (
+          <DropdownMenuItem onClick={onShare}>
+            <Share2 aria-hidden="true" />
+            Share
+          </DropdownMenuItem>
+        )}
         <DropdownMenuItem onClick={onMoveTop} disabled={isFirst}>
           <ArrowUp aria-hidden="true" />
           To top

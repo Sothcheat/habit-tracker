@@ -69,7 +69,7 @@ function TagFilter({
   return (
     <Popover open={open} onOpenChange={handleOpenChange}>
       <PopoverTrigger
-        render={<Button variant="outline" className="h-9 gap-2 px-3" />}
+        render={<Button variant="outline" className="h-11 gap-2 px-3 sm:h-9" />}
       >
         <SlidersHorizontal aria-hidden="true" />
         Tags

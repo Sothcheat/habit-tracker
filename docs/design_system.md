@@ -130,10 +130,24 @@ defined once silently fails in the other theme.
 
 ## 4. Typography
 
-**Montserrat**, loaded from Google Fonts in [`index.html`](../index.html) at
-weights 400/500/600/700 with `display=swap`. That link is load-bearing:
-`--font-sans` names Montserrat but does not fetch it, so removing the link
+**Montserrat**, self-hosted at `public/fonts/montserrat-latin-variable.woff2`
+and declared with `@font-face` in [`src/index.css`](../src/index.css) at
+weights 400/500/600 with `display=swap`. Those rules are load-bearing:
+`--font-sans` names Montserrat but does not fetch it, so removing them
 silently drops the whole product to a system fallback.
+
+It was on Google Fonts until the load chain showed the cost — document, then
+`fonts.googleapis.com` for a stylesheet, then `fonts.gstatic.com` for the
+file, 900ms before text could paint in its real face. Self-hosted it is one
+same-origin request, preloaded from [`index.html`](../index.html) because a
+font declared in CSS is discovered a round trip too late, and the service
+worker precaches it — so the app reads correctly offline rather than falling
+back to a system sans.
+
+**700 is not loaded**, which is what makes the rule below enforceable rather
+than advisory: `font-bold` now renders as a synthesised weight, not Montserrat
+Bold. One file covers 400–600; Google returns the same URL for every weight,
+which it only does for a variable font.
 
 Montserrat is geometric and gets shouty above 600. The system stops at 600 for
 headings and 500 for emphasis; **do not use 700+ for UI text.**
@@ -147,6 +161,7 @@ headings and 500 for emphasis; **do not use 700+ for UI text.**
 | Task title on a card | `font-medium text-base leading-6` |
 | Card meta (streak, due date) | `text-xs text-muted-foreground` |
 | Field label | `font-medium text-sm` |
+| Auth input text | `text-base` at every width (see §6) |
 | Button | `font-medium text-sm` |
 | Body | `text-sm` |
 | Secondary text | `text-sm text-muted-foreground leading-relaxed` |
@@ -183,6 +198,68 @@ Auth overrides sizing at the call site rather than forking the primitive — see
 [`AuthField`](../src/components/auth/AuthField.tsx) and
 [`AuthSubmit`](../src/components/auth/AuthSubmit.tsx). Primitives stay
 regenerable by the shadcn CLI; the auth look lives in the wrappers.
+
+**Auth text is 16px at every width, not just below `md`.** The primitive is
+`text-base md:text-sm`; auth overrides both halves. 14px in a 44px field
+leaves it looking under-filled, and a password mask at 14px is a row of ~4px
+dots — Montserrat's bullet is a small glyph, and the mask has no word shapes
+to help it read. The password field also spreads to `tracking-[0.18em]` once
+it has content, so the dots can be counted; the placeholder is words rather
+than bullets, so the spacing is held back until there is something to space.
+
+Beware the merge when overriding a responsive default: `cn("text-base
+md:text-sm", "text-sm")` keeps **both**, pinning every width to 14px. Override
+the modifier you mean — `md:text-base` — or the variant you left alone wins
+from `md` up.
+
+### On a phone
+
+**The base screen is 320px** — an iPhone SE, first generation. Everything is
+laid out for that width first and allowed to relax upwards; there is no
+narrower case to design for.
+
+The columns follow `grid-cols-1 sm:grid-cols-2 lg:grid-cols-3`: one on a
+phone, two on a tablet with the third wrapping under them, three once all
+three fit. Two things change with the single column:
+
+- **The card gives its title room back.** Strips go `w-12` and the body
+  `px-3`, against `w-14` / `px-4` from `sm` up. At 320px a habit's two strips
+  and its padding left the title 96px, which wrapped a four-word habit onto
+  three lines.
+- **Columns size to their contents.** The `28rem` floor applies from `sm`
+  only: stacked, three empty columns meant scrolling three empty screens to
+  reach To-dos.
+- **The toolbar takes two rows.** Search spans the first on its own; Tags and
+  **Add task** share the second, keeping find-on-the-left and make-on-the-right
+  within that row. Letting the three wrap naturally put Search and Tags
+  together and stranded Add task alone on a row, which read as a mistake.
+
+**Every control a finger uses gets 44px, and most of them do it invisibly.**
+`tap-target` in [`src/index.css`](../src/index.css) lays a 44px box over a
+control's centre on coarse pointers only, so the habit buttons, the checkbox,
+the ⋮ button and the alert's dismiss keep the compact sizing the dense surface
+wants while the thumb gets the area Apple asks for. Apply it only where 44px
+of clearance actually exists — overlapping hit boxes on adjacent controls are
+worse than a small target.
+
+The checkbox does **not** carry it: the `Checkbox` primitive already expands
+its own hit area with `after:-inset-x-3 after:-inset-y-2`, which at the
+tracker's `size-7` is 52×44 before anything is added. Check a primitive for
+that pattern before reaching for `tap-target`; two stacked hit layers help
+nobody.
+
+Where growing the control costs nothing, it grows instead: the toolbar's
+search, **Tags** and **Add task**, and each column's add field, are `h-11`
+below `sm` and compact above it.
+
+**The theme toggle is the deliberate exception** — its segments stay 28px.
+Three 44px segments plus the wordmark and the avatar do not fit one 320px row,
+and a header that wraps to two rows costs every screen more than a rarely used
+control costs a thumb. 28px still clears the 24px WCAG 2.5.8 floor.
+
+**Inputs stay `text-base` below `md`.** iOS zooms the page when a field under
+16px takes focus, and never zooms back out. The `Input` primitive already
+carries `text-base md:text-sm`; keep it that way.
 
 ---
 
@@ -224,13 +301,24 @@ count badge, `line`-variant tabs as filters, an add input, the list, and a
 standing explainer at the foot of the column. On `lg` they sit side by side
 and fill the viewport height; below that they stack.
 
-- **The header** holds the wordmark, the theme toggle and the account avatar —
-  nothing else. The avatar is the user's uploaded photo, failing that one their
+- **The header** holds the wordmark, the theme toggle and the account avatar,
+  plus the offline chip when there is something to say. The wordmark is the
+  page's `h1` here (`<Wordmark heading />`) — the column headings are `h2`, so
+  without it the tracker would start at level two. On the auth pages the card
+  titles itself, so the wordmark stays a `div` rather than making a second
+  `h1`. The avatar is the
+  user's uploaded photo, failing that one their
   sign-in provides (Google), failing both their initial on `secondary`. It
   opens a popover, not a menu (it is mostly information): a larger avatar,
   name, the full email on one line — the panel is `w-max`, sized to it, and
   wraps only past the screen width, since showing it is the point — then the
   photo controls, then Sign out.
+- **The offline chip** ([`OfflineIndicator`](../src/components/OfflineIndicator.tsx))
+  sits before the theme toggle: an icon and the word *Offline* on `secondary`,
+  at `h-8` so it lines up with the controls beside it. It also counts writes
+  the outbox is holding — *Offline · 3 waiting*, or just *3 waiting* once the
+  connection is back and they are going out. See §9 for why it is neither
+  `destructive` nor `caution`.
 - **The photo controls** are a bordered band between the identity block and
   Sign out: an `outline` **Add photo** / **Change photo**, and a muted `ghost`
   **Remove** shown only when there is a photo to remove. Removing a photo is
@@ -277,8 +365,15 @@ and fill the viewport height; below that they stack.
   is `opacity-0`, never `hidden`, so it stays in the tab order and shows on
   focus; on touch screens (`hover: none`), where nothing can hover, it is
   always shown. Tailwind v4 already limits `hover:` to hover-capable devices.
-- **The ⋮ menu** is Edit · To top · To bottom · Delete, with Delete as the
-  menu's `destructive` item behind a separator. A move that would do nothing —
+- **The ⋮ menu** is Edit · Share · To top · To bottom · Delete, with Delete as
+  the menu's `destructive` item behind a separator. **Share** opens the
+  system's own share sheet through the Web Share API, and where there is none
+  — most desktop browsers — copies to the clipboard instead and says so in the
+  column, quietly. What it sends is one line of what the card already shows:
+  the title, plus a habit's taps today, a daily's streak, or a to-do's due
+  date. Never a note, a tag or anything the card keeps to itself. Dismissing
+  the sheet is a decision, not an error, so nothing follows it — and nothing
+  is copied behind the user's back either. A move that would do nothing —
   To top on the first card — is disabled, not hidden.
 - **The editor** has a header band tinted with the card's own tone (the same
   `STRIP_TONE`), holding the title, Cancel and Save, and the Title and Notes
@@ -298,7 +393,20 @@ and fill the viewport height; below that they stack.
   border falls below the 3:1 a control boundary needs.
 - **Writes are confirmed, not optimistic.** A card fades to 60% and its
   controls disable while its request is in flight; the screen only changes once
-  the database has accepted the change.
+  the database has accepted the change. **Except when the network is
+  unreachable**: the change is then kept in the outbox and shown as done, and
+  the header chip counts what is waiting. The rule bends for a connection that
+  will come back, never for a database that said no — a refused write still
+  fails in its column, in red.
+- **Offline, the app opens to what it last showed.** A failed refresh with a
+  snapshot on screen produces no error at all: the chip in the header already
+  says the connection is gone, and a red alert over tasks the user can still
+  work with would be noise. The error screen is only for having nothing.
+- **Confirmations are not alerts.** The same live region also carries a quiet
+  `secondary` notice — "Copied to clipboard." — which clears itself after a
+  few seconds. Red is for something the user did that failed; a confirmation
+  has been read by the time it matters and should not leave them something to
+  tidy up.
 - **Errors stay in their column**, in a dismissible `destructive` alert inside
   an always-present live region. The add input keeps its text on failure — the
   request failed, not the typing. The editor shows its errors inline.
@@ -323,13 +431,21 @@ and fill the viewport height; below that they stack.
 
 ## 9. When a section breaks
 
-Two different failures, two different treatments, and they are not
+Three different failures, three different treatments, and they are not
 interchangeable:
 
 - **A request failed** — the data never arrived, the write was refused. These
   are values, not exceptions: the tracker's `Result` type carries the message
   to a `destructive` alert inside the column, or inline in a form. The UI is
   intact; only the data is missing.
+- **The connection is gone** — nothing has failed *yet*, but everything is
+  about to. The offline chip in the header states it once, quietly, on
+  `secondary`. It is not `destructive`, because the user did nothing that
+  failed and red here would outrank the real refusals the columns raise; it is
+  not `caution`, because that token means task state and would read as "this
+  daily is due". It says only what the browser knows: `navigator.onLine` is
+  trustworthy when false and merely hopeful when true, so the chip appears on
+  a certain offline and never claims the reverse.
 - **A render threw** — a component hit something it could not draw. React
   unmounts the whole tree unless a boundary catches it, so
   [`ErrorBoundary`](../src/components/ErrorBoundary.tsx) wraps each section
@@ -351,12 +467,34 @@ The header's boundary uses the `inline` variant — one quiet row with a small
 Try again — because a card in the middle of the bar would be louder than the
 control it replaced.
 
+### Not a failure: the update prompt
+
+A new build **waits** rather than activating under the user
+(`registerType: "prompt"`), and
+[`UpdateToast`](../src/components/UpdateToast.tsx) offers it: "New version
+available", a `primary` **Refresh**, and a `ghost` **Later**. It sits at the
+bottom of the screen on `card` — full width on a phone, bottom-right from
+`sm` — in a live region that is always rendered and collapses with
+`empty:hidden`, like every other status message here.
+
+It asks because this app holds unsaved state: a half-typed task, a dialog
+mid-edit, an outbox still draining. Reloading the page without asking would
+throw that away, which is exactly the thing the offline work exists to
+prevent.
+
 ---
 
 ## 10. Motion
 
 There is **no decorative animation.** The only motion is the primitives' own
 state transitions on hover, focus and press.
+
+**The dialogs are lazily loaded, and stay mounted once opened.** They are a
+fifth of the tracker's bundle and none is on screen when it loads, so they are
+split out — but they close with `animate-out`, and a dialog rendered only
+while its task is non-null unmounts the instant it closes and never plays it.
+Render them behind a sticky "has been opened" flag, never behind the open
+state itself.
 
 `@layer base` carries a `prefers-reduced-motion: reduce` block that collapses
 all animation and transition durations to ~0. It uses `!important` and has a

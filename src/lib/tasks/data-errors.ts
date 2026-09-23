@@ -1,6 +1,34 @@
 import type { PostgrestError } from "@supabase/supabase-js";
 
 /**
+ * Each browser words an unreachable network differently — Chrome "Failed to
+ * fetch", Firefox "NetworkError when attempting to fetch resource", Safari
+ * "Load failed" — and matching only the first two would leave Safari users
+ * told "Something went wrong" for a dropped connection.
+ */
+const NETWORK_MESSAGE =
+  /failed to fetch|networkerror|load failed|network request failed/i;
+
+/**
+ * Whether a response failed because the request never reached the server.
+ *
+ * postgrest-js does not throw on a dead connection: it resolves with an error
+ * and `status: 0`, which no HTTP reply can produce, so that is the reliable
+ * signal. The message is a fallback for the clients that don't set a status.
+ *
+ * This is the question the outbox asks — a write that never left the device
+ * can be replayed, while one the database refused cannot.
+ */
+export function isNetworkFailure(response: {
+  status?: number;
+  error: { message?: string } | null;
+}): boolean {
+  if (!response.error) return false;
+  if (response.status === 0) return true;
+  return NETWORK_MESSAGE.test(response.error.message ?? "");
+}
+
+/**
  * Turns a PostgREST / Postgres error into a sentence a person can act on.
  * The raw error still goes to the console for debugging.
  */
@@ -10,7 +38,7 @@ export function describeDataError(error: PostgrestError | Error): string {
   const code = "code" in error ? error.code : "";
   const message = error.message ?? "";
 
-  if (message.includes("Failed to fetch") || message.includes("NetworkError")) {
+  if (NETWORK_MESSAGE.test(message)) {
     return "Can't reach the server. Check your connection and try again.";
   }
 

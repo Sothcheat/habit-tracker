@@ -158,19 +158,27 @@ export function fetchDailyLogs(userId: string, since: ISODate) {
 // ─── Tasks ──────────────────────────────────────────────────────────────────
 
 /**
+ * Builds the row for a new task without sending it.
+ *
  * The schema's check constraints require type-specific fields: a habit needs
  * a direction, a daily needs a frequency and start date. New tasks get
  * sensible defaults so a one-line "Add a daily" always satisfies them.
+ *
+ * Separate from the insert because the row is needed in two places at once:
+ * sent to the database, and — when the network is gone — put in the outbox
+ * and drawn on screen. `id` is chosen here rather than by `gen_random_uuid()`
+ * so all three are the same row, and anything queued behind it can name it.
  */
-export function insertTask(
+export function buildTaskRow(
   userId: string,
   type: TaskType,
   title: string,
   today: ISODate,
   /** Anything the create dialog set: notes, priority, schedule, due date. */
   fields: Omit<TablesInsert<"tasks">, "user_id" | "type" | "title"> = {},
-) {
-  const row: TablesInsert<"tasks"> = {
+): TablesInsert<"tasks"> {
+  return {
+    id: crypto.randomUUID(),
     ...(type === "habit" && { direction: "both" as const }),
     ...(type === "daily" && { frequency: "daily" as const, start_date: today }),
     ...fields,
@@ -179,6 +187,51 @@ export function insertTask(
     type,
     title,
   };
+}
+
+/**
+ * The row as the database would have returned it, for a task created while
+ * offline.
+ *
+ * Every default in `tasks` is reproducible here — the nullable columns default
+ * to null, the timestamps to now, and `position` to `extract(epoch from now())`,
+ * which is exactly the unit `sortKey()` already uses. So a task created offline
+ * sorts where it would have, and when the insert finally lands the server's row
+ * matches the one that has been on screen all along.
+ *
+ * Keys explicitly set to `undefined` are skipped: a dialog that did not touch
+ * a field must not turn its default into undefined.
+ */
+export function localTaskFromRow(
+  row: TablesInsert<"tasks">,
+  tagIds: string[],
+): Task {
+  const now = new Date().toISOString();
+  const task: Record<string, unknown> = {
+    notes: null,
+    priority: null,
+    direction: null,
+    frequency: null,
+    repeat_days: null,
+    every_n_days: null,
+    start_date: null,
+    due_date: null,
+    completed_at: null,
+    archived_at: null,
+    created_at: now,
+    updated_at: now,
+    position: Date.now() / 1000,
+  };
+  for (const [key, value] of Object.entries(row)) {
+    if (value !== undefined) task[key] = value;
+  }
+  task.task_tags = tagIds.map((tag_id) => ({ tag_id }));
+  // Asserted rather than inferred: every column above is accounted for, and
+  // the alternative is restating the whole Row type by hand.
+  return task as Task;
+}
+
+export function insertTaskRow(row: TablesInsert<"tasks">) {
   return supabase.from("tasks").insert(row).select(TASK_COLUMNS).single();
 }
 
@@ -215,12 +268,25 @@ export function insertHabitLog(
   taskId: string,
   direction: Enums<"tap_direction">,
   today: ISODate,
+  /**
+   * The row's id, supplied by the caller when the tap is being replayed from
+   * the outbox. Sending the same id twice collides on the primary key instead
+   * of recording a second tap, which is what makes a retry safe after a reply
+   * was lost on a dying connection. Omitted for a normal tap: the database
+   * generates one.
+   */
+  logId?: string,
 ) {
   // No user_id column to set: the RLS insert policy checks that task_id
   // belongs to the caller through owns_task().
   return supabase
     .from("habit_logs")
-    .insert({ task_id: taskId, direction, log_date: today })
+    .insert({
+      ...(logId ? { id: logId } : {}),
+      task_id: taskId,
+      direction,
+      log_date: today,
+    })
     .select("id, task_id, direction, log_date")
     .single();
 }

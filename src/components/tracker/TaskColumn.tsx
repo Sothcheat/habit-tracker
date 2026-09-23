@@ -23,6 +23,8 @@ type TaskColumnProps<V extends string> = {
   onAdd: (title: string) => Promise<Result>;
   /** Last failed card action in this column, if any. */
   error: string | null;
+  /** A quiet confirmation, e.g. "Copied to clipboard". Not an error. */
+  notice?: string | null;
   onDismissError: () => void;
   loading: boolean;
   empty: {
@@ -44,6 +46,7 @@ function TaskColumn<V extends string>({
   onAdd,
   error,
   onDismissError,
+  notice,
   loading,
   empty,
 }: TaskColumnProps<V>) {
@@ -83,7 +86,7 @@ function TaskColumn<V extends string>({
           </TabsList>
         </div>
 
-        <div className="flex min-h-[28rem] flex-1 flex-col gap-2 rounded-xl bg-muted p-3 lg:min-h-[calc(100svh-13.5rem)]">
+        <div className="flex flex-1 flex-col gap-2 rounded-xl bg-muted p-3 sm:min-h-[28rem] lg:min-h-[calc(100svh-13.5rem)]">
           <AddTaskForm
             id={id}
             placeholder={addPlaceholder}
@@ -104,10 +107,18 @@ function TaskColumn<V extends string>({
                   type="button"
                   onClick={onDismissError}
                   aria-label="Dismiss"
-                  className="rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-destructive/40"
+                  className="tap-target rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-destructive/40"
                 >
                   <X className="size-4" aria-hidden="true" />
                 </button>
+              </div>
+            )}
+
+            {/* A confirmation, not an alert: quiet, per the design system —
+                red is for something the user did that failed. */}
+            {notice && (
+              <div className="rounded-lg border border-border bg-secondary px-3 py-2 text-secondary-foreground text-sm">
+                {notice}
               </div>
             )}
           </div>
@@ -199,7 +210,7 @@ function AddTaskForm({
         aria-invalid={error ? true : undefined}
         aria-describedby={error ? errorId : undefined}
         enterKeyHint="done"
-        className="h-10 border-transparent bg-card px-3.5 shadow-xs"
+        className="h-11 border-transparent bg-card px-3.5 shadow-xs sm:h-10"
       />
       {error && (
         <p

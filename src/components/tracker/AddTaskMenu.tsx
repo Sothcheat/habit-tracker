@@ -30,7 +30,9 @@ const OPTIONS = [
 function AddTaskMenu({ onPick }: { onPick: (type: TaskType) => void }) {
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger render={<Button className="h-9 gap-1.5 px-3.5" />}>
+      <DropdownMenuTrigger
+        render={<Button className="h-11 gap-1.5 px-3.5 sm:h-9" />}
+      >
         <Plus aria-hidden="true" />
         Add task
         <ChevronDown className="opacity-70" aria-hidden="true" />

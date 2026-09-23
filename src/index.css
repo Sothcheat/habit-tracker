@@ -173,6 +173,93 @@
   --shadow-2xl: var(--shadow-2xl);
 }
 
+/**
+ * A 44px touch target on a control that stays visually smaller.
+ *
+ * The tracker's controls are deliberately compact — a 44px checkbox would
+ * dominate the card it sits on — but a finger is not, and a 28px tap target
+ * on a phone is a miss waiting to happen. This lays an invisible 44px box
+ * over the control's centre, so what the eye sees and what the thumb hits
+ * are allowed to differ.
+ *
+ * Coarse pointers only: on a mouse the small target is easy, and an
+ * overlapping hit box next to another control would be worse than none.
+ * Apply it only where 44px of clearance genuinely exists.
+ */
+/**
+ * Montserrat, self-hosted.
+ *
+ * It used to come from Google Fonts, which cost two extra origins and a
+ * request chain — document, then fonts.googleapis.com for the CSS, then
+ * fonts.gstatic.com for the file — 900ms of critical path before any text
+ * could paint in its real face. Served from here it is one same-origin
+ * request the browser already has a connection for, and the service worker
+ * precaches it (`woff2` is in globPatterns), so the app reads correctly
+ * offline instead of falling back to a system sans.
+ *
+ * One file for all three weights: Google returns the same URL for each, which
+ * it only does for a variable font. The weights are still declared separately,
+ * exactly as its own stylesheet does, so this renders identically whether the
+ * file turns out to be variable or static.
+ *
+ * 700 is deliberately absent. The system stops at 600 — see §4 of
+ * docs/design_system.md — and nothing uses `font-bold`.
+ *
+ * The unicode-range is Google's own `latin` subset. A character outside it
+ * falls to the next family in `--font-sans` rather than rendering blank.
+ */
+@font-face {
+  font-family: "Montserrat";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("/fonts/montserrat-latin-variable.woff2") format("woff2");
+  unicode-range:
+    U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6,
+    U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122,
+    U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: "Montserrat";
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("/fonts/montserrat-latin-variable.woff2") format("woff2");
+  unicode-range:
+    U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6,
+    U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122,
+    U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: "Montserrat";
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("/fonts/montserrat-latin-variable.woff2") format("woff2");
+  unicode-range:
+    U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6,
+    U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122,
+    U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@utility tap-target {
+  @media (pointer: coarse) {
+    position: relative;
+
+    &::before {
+      content: "";
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      height: 2.75rem;
+      width: 2.75rem;
+      transform: translate(-50%, -50%);
+    }
+  }
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;

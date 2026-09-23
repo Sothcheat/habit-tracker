@@ -5,26 +5,49 @@ import {
   Search,
   SquareCheckBig,
 } from "lucide-react";
-import { useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
+
+/**
+ * The dialogs are the heaviest thing on this page and none of them is on
+ * screen when it opens — together they are about a fifth of the tracker
+ * bundle, in forms, selects and a date field nobody has asked for yet.
+ *
+ * Split out, they cost one fetch the first time a dialog is opened, and
+ * nothing after: the service worker precaches every built chunk, so from the
+ * second visit they are already on the device.
+ */
+const DeleteTaskDialog = lazy(() =>
+  import("@/components/tracker/DeleteTaskDialog").then((m) => ({
+    default: m.DeleteTaskDialog,
+  })),
+);
+const TaskCreateDialog = lazy(() =>
+  import("@/components/tracker/TaskEditDialog").then((m) => ({
+    default: m.TaskCreateDialog,
+  })),
+);
+const TaskEditDialog = lazy(() =>
+  import("@/components/tracker/TaskEditDialog").then((m) => ({
+    default: m.TaskEditDialog,
+  })),
+);
+
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { OfflineIndicator } from "@/components/OfflineIndicator";
 import { ProfileMenu } from "@/components/ProfileMenu";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { AddTaskMenu } from "@/components/tracker/AddTaskMenu";
 import { DailyCard, HabitCard, TodoCard } from "@/components/tracker/cards";
-import { DeleteTaskDialog } from "@/components/tracker/DeleteTaskDialog";
 import { TagFilter } from "@/components/tracker/TagFilter";
 import type { Tone } from "@/components/tracker/TaskCard";
 import { FilteredOut, TaskColumn } from "@/components/tracker/TaskColumn";
-import {
-  TaskCreateDialog,
-  TaskEditDialog,
-} from "@/components/tracker/TaskEditDialog";
 import { TaskMenu } from "@/components/tracker/TaskMenu";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Wordmark } from "@/components/Wordmark";
 import { useAuth } from "@/lib/auth";
+import { share, taskShareText } from "@/lib/share";
 import type { DailyLog, HabitLog, Task, TaskType } from "@/lib/tasks/api";
 import { avatarPublicUrl } from "@/lib/tasks/api";
 import {
@@ -55,6 +78,7 @@ function Tracker({ userId }: { userId: string }) {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [creatingType, setCreatingType] = useState<TaskType | null>(null);
   const [columnErrors, setColumnErrors] = useState<ColumnErrors>(NO_ERRORS);
+  const [columnNotices, setColumnNotices] = useState<ColumnErrors>(NO_ERRORS);
 
   const loading = state.status === "loading";
   // Column order: position ascending (see sortKey for the pre-migration case).
@@ -124,7 +148,24 @@ function Tracker({ userId }: { userId: string }) {
   const dismiss = (type: TaskType) => () =>
     setColumnErrors((errors) => ({ ...errors, [type]: null }));
 
+  // A confirmation has been read by the time it matters, so it clears itself
+  // rather than leaving the user something to tidy up.
+  const anyNotice = Object.values(columnNotices).some(Boolean);
+  useEffect(() => {
+    if (!anyNotice) return;
+    const timer = setTimeout(() => setColumnNotices(NO_ERRORS), 4000);
+    return () => clearTimeout(timer);
+  }, [anyNotice]);
+
   const noMatch = filtering ? "Nothing matches your search or tags." : null;
+
+  // Sticky: true from the first dialog opened until the page is left.
+  const [dialogsUsed, setDialogsUsed] = useState(false);
+  const opening =
+    creatingType !== null || editingId !== null || deletingId !== null;
+  useEffect(() => {
+    if (opening) setDialogsUsed(true);
+  }, [opening]);
 
   /**
    * The ⋮ menu for a card. "First" and "last" are judged against the whole
@@ -139,11 +180,50 @@ function Tracker({ userId }: { userId: string }) {
         isFirst={column[0]?.id === task.id}
         isLast={column.at(-1)?.id === task.id}
         onEdit={() => setEditingId(task.id)}
+        onShare={() => shareTask(task)}
         onMoveTop={() => run(task.type, tracker.moveTask(task.id, "top"))}
         onMoveBottom={() => run(task.type, tracker.moveTask(task.id, "bottom"))}
         onDelete={() => setDeletingId(task.id)}
       />
     );
+  }
+
+  /**
+   * Hands the task to the system share sheet.
+   *
+   * Called straight from the click, with no await before it: the Web Share
+   * API spends the gesture's user activation, and anything awaited first
+   * would lose it. A dismissed sheet is a decision, not a failure, so only a
+   * real error reaches the column's alert.
+   */
+  function shareTask(task: Task) {
+    const facts =
+      task.type === "habit"
+        ? { plusToday: habitInfo(task).plusToday }
+        : task.type === "daily"
+          ? { streak: dailyInfo(task).streak }
+          : {};
+    share({
+      title: "Cadence",
+      text: taskShareText(task, facts),
+      url: window.location.origin,
+    }).then((outcome) => {
+      if (outcome === "failed") {
+        setColumnErrors((errors) => ({
+          ...errors,
+          [task.type]: "That couldn't be shared.",
+        }));
+      }
+      // Where there is no share sheet the text went to the clipboard instead,
+      // which is invisible unless we say so. "shared" needs no confirmation:
+      // the sheet was the confirmation.
+      if (outcome === "copied") {
+        setColumnNotices((notices) => ({
+          ...notices,
+          [task.type]: "Copied to clipboard.",
+        }));
+      }
+    });
   }
 
   /** The same state colour the card's strips use, for the editor's header. */
@@ -169,7 +249,12 @@ function Tracker({ userId }: { userId: string }) {
       <div className="flex min-h-svh flex-col">
         <header className="sticky top-0 z-10 border-border border-b bg-background/90 backdrop-blur">
           <div className="mx-auto flex w-full max-w-7xl flex-wrap items-center gap-x-4 gap-y-3 px-4 py-3 sm:px-6">
-            <Wordmark className="mr-auto" />
+            <Wordmark heading className="mr-auto" />
+
+            {/* Outside the boundary below: it is a plain reading of
+                navigator.onLine with nothing to throw, and it reports on the
+                connection the account menu needs to work. */}
+            <OfflineIndicator pending={tracker.pendingWrites} />
 
             {/* The header is the one part that must survive anything: it
                 holds the way out. Inline, so a failure here stays a quiet row
@@ -213,8 +298,12 @@ function Tracker({ userId }: { userId: string }) {
           <main className="mx-auto flex w-full max-w-7xl flex-1 flex-col gap-6 px-4 py-6 sm:px-6">
             {/* Toolbar: find things on the left, make things on the right. */}
             <ErrorBoundary section="The toolbar">
-              <div className="flex flex-wrap items-center gap-2">
-                <div className="relative min-w-48 flex-1 sm:max-w-md">
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-3">
+                {/* Full width below sm, so it takes the first row on its own
+                    and Tags and Add task share the second. Left to wrap on
+                    their own, Search and Tags fill row one and Add task is
+                    stranded right on a row of its own. */}
+                <div className="relative w-full sm:w-auto sm:min-w-48 sm:max-w-md sm:flex-1">
                   <Search
                     className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
                     aria-hidden="true"
@@ -225,7 +314,7 @@ function Tracker({ userId }: { userId: string }) {
                     placeholder="Search"
                     value={search}
                     onChange={(event) => setSearch(event.target.value)}
-                    className="h-9 pl-9"
+                    className="h-11 pl-9 sm:h-9"
                   />
                 </div>
                 <TagFilter
@@ -246,7 +335,10 @@ function Tracker({ userId }: { userId: string }) {
 
             {/* One boundary per column, not one around the grid: a bad row in
                 To-dos should cost you To-dos, not the whole board. */}
-            <div className="grid flex-1 gap-8 lg:grid-cols-3 lg:gap-6">
+            {/* One column on a phone, two on a tablet, three once there is
+                room for all three. At sm the third wraps under the first two,
+                which is fine — they are independent lists, not a table. */}
+            <div className="grid flex-1 grid-cols-1 gap-8 sm:grid-cols-2 sm:gap-6 lg:grid-cols-3">
               <ErrorBoundary section="Habits">
                 <TaskColumn
                   id="habits"
@@ -264,6 +356,7 @@ function Tracker({ userId }: { userId: string }) {
                   onAdd={(title) => tracker.addTask("habit", title)}
                   error={columnErrors.habit}
                   onDismissError={dismiss("habit")}
+                  notice={columnNotices.habit}
                   empty={{
                     icon: Diff,
                     title: "These are your habits",
@@ -322,6 +415,7 @@ function Tracker({ userId }: { userId: string }) {
                   onAdd={(title) => tracker.addTask("daily", title)}
                   error={columnErrors.daily}
                   onDismissError={dismiss("daily")}
+                  notice={columnNotices.daily}
                   empty={{
                     icon: CalendarDays,
                     title: "These are your dailies",
@@ -380,6 +474,7 @@ function Tracker({ userId }: { userId: string }) {
                   onAdd={(title) => tracker.addTask("todo", title)}
                   error={columnErrors.todo}
                   onDismissError={dismiss("todo")}
+                  notice={columnNotices.todo}
                   empty={{
                     icon: SquareCheckBig,
                     title: "These are your to-dos",
@@ -426,24 +521,32 @@ function Tracker({ userId }: { userId: string }) {
           </main>
         )}
 
-        <TaskCreateDialog
-          type={creatingType}
-          tracker={tracker}
-          onClose={() => setCreatingType(null)}
-        />
+        {/* Mounted from the first time a dialog is opened and never unmounted
+            after, rather than rendered only while open. They close with
+            `animate-out`, and a component that vanishes the instant its task
+            goes null never gets to play it. */}
+        {dialogsUsed && (
+          <Suspense fallback={null}>
+            <TaskCreateDialog
+              type={creatingType}
+              tracker={tracker}
+              onClose={() => setCreatingType(null)}
+            />
 
-        <TaskEditDialog
-          task={editing}
-          tone={toneOf(editing)}
-          tracker={tracker}
-          onClose={() => setEditingId(null)}
-        />
+            <TaskEditDialog
+              task={editing}
+              tone={toneOf(editing)}
+              tracker={tracker}
+              onClose={() => setEditingId(null)}
+            />
 
-        <DeleteTaskDialog
-          task={deleting}
-          onOpenChange={(open) => !open && setDeletingId(null)}
-          onDelete={tracker.removeTask}
-        />
+            <DeleteTaskDialog
+              task={deleting}
+              onOpenChange={(open) => !open && setDeletingId(null)}
+              onDelete={tracker.removeTask}
+            />
+          </Suspense>
+        )}
       </div>
     </TooltipProvider>
   );

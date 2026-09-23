@@ -20,7 +20,14 @@ Built with React 19, TypeScript and Vite, with Supabase for accounts and data.
 - **To-dos:** optional due dates, with overdue ones flagged.
 - **Organise:** priority, tags, search and a tag filter. Move any task to the
   top or bottom of its column.
+- **Works offline:** the app opens to your tasks with no connection, and
+  anything you do — add, edit, delete, tap, tick — is kept and synced when
+  you're back. The header counts what's still waiting.
+- **Share:** send a task and how it's going to anything on your phone, through
+  the system share sheet. Hidden on browsers without the Web Share API.
 - **Themes:** light, dark, or follow the system.
+- **Built for a phone:** one column, 44px touch targets, laid out for a 320px
+  screen upwards.
 
 ## Getting started
 
@@ -131,6 +138,11 @@ Known gaps in what's built today:
 - **Each tap waits for the server.** Writes are confirmed rather than
   optimistic, so nothing shows as saved until it is. The trade-off is a short
   delay on slow connections.
+- **Offline sync is last-write-wins.** Changes made offline are replayed in
+  order when the connection returns, and overwrite whatever another device did
+  in the meantime. There is no merge and no conflict prompt.
+- **Tags are not queued.** Creating, renaming and deleting tags needs a
+  connection; tasks and their logs do not.
 
 ## Project structure
 

@@ -35,6 +35,11 @@ type TaskCardProps = {
  * The shared shape of a habit, daily or to-do: a control strip on the left,
  * an optional one on the right, and a body that opens the editor.
  *
+ * Narrower strips and body padding below `sm`: on a 320px screen a habit's
+ * two 56px strips plus 16px of body padding left the title 96px, enough to
+ * wrap "drink 2l of water" onto three lines. The controls inside are
+ * unchanged — their 44px touch target still clears a 48px strip.
+ *
  * Alignment is one shared measurement, not per-control nudges: the title's
  * first line is centred 24px from the top (12px padding + half its 24px line),
  * and every strip control is centred on that same line — a 32px habit button
@@ -65,7 +70,7 @@ function TaskCard({
     >
       <div
         className={cn(
-          "flex w-14 shrink-0 justify-center pt-2",
+          "flex w-12 shrink-0 justify-center pt-2 sm:w-14",
           STRIP_TONE[leftTone],
         )}
       >
@@ -79,7 +84,7 @@ function TaskCard({
           type="button"
           onClick={onOpen}
           className={cn(
-            "flex min-w-0 flex-1 flex-col px-4 py-3 text-left outline-none transition-colors hover:bg-accent/40 focus-visible:bg-accent/40 focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:ring-inset",
+            "flex min-w-0 flex-1 flex-col px-3 py-3 text-left outline-none transition-colors hover:bg-accent/40 focus-visible:bg-accent/40 focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:ring-inset sm:px-4",
           )}
         >
           <span className="sr-only">Edit: </span>
@@ -113,7 +118,7 @@ function TaskCard({
       {right && (
         <div
           className={cn(
-            "flex w-14 shrink-0 justify-center pt-2",
+            "flex w-12 shrink-0 justify-center pt-2 sm:w-14",
             STRIP_TONE[rightTone],
           )}
         >

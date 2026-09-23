@@ -1,0 +1,10 @@
+# Cadence — https://habit-tracker-bay-sigma.vercel.app
+#
+# This file has to exist as a real file. Every unmatched path is rewritten to
+# index.html (see vercel.json), so without it /robots.txt answers with the
+# app's HTML and a crawler reads 44 lines of markup as directives.
+
+User-agent: *
+Allow: /
+
+Sitemap: https://habit-tracker-bay-sigma.vercel.app/sitemap.xml
